@@ -24,7 +24,7 @@ fn read_device_model() -> Result<String> {
         .map(|s| s.trim().to_string())
         .map_err(|e| anyhow::anyhow!("Failed to read product SKU: {}", e))?;
 
-    println!("[DEBUG] Linux product SKU: {}", sku);
+    // println!("[DEBUG] Linux product SKU: {}", sku);
 
     if sku.starts_with("RZ") {
         Ok(sku.chars().take(10).collect())
@@ -35,7 +35,7 @@ fn read_device_model() -> Result<String> {
 
 #[cfg(not(any(target_os = "windows", target_os = "linux")))]
 fn read_device_model() -> Result<String> {
-    println!("[DEBUG] Unsupported platform detected");
+    // println!("[DEBUG] Unsupported platform detected");
     anyhow::bail!("Automatic model detection is not implemented for this platform")
 }
 
@@ -101,18 +101,18 @@ impl Device {
             .collect();
 
         if razer_pid_list.is_empty() {
-            println!("[DEBUG] No Razer devices found in USB enumeration");
+            // println!("[DEBUG] No Razer devices found in USB enumeration");
             anyhow::bail!("No Razer devices found")
         }
 
-        println!(
-            "[DEBUG] Found Razer devices with PIDs: {:?}",
-            razer_pid_list
-        );
+        // println!(
+        //     "[DEBUG] Found Razer devices with PIDs: {:?}",
+        //     razer_pid_list
+        // );
 
         match read_device_model() {
             Ok(model) => {
-                println!("[DEBUG] Detected model number: {}", model);
+                // println!("[DEBUG] Detected model number: {}", model);
                 if model.starts_with("RZ09-") {
                     Ok((razer_pid_list, model))
                 } else {
@@ -120,7 +120,7 @@ impl Device {
                 }
             }
             Err(e) => {
-                println!("[DEBUG] Failed to detect model: {}", e);
+                // println!("[DEBUG] Failed to detect model: {}", e);
                 anyhow::bail!("Failed to detect model: {}", e)
             }
         }
@@ -128,21 +128,21 @@ impl Device {
 
     pub fn detect() -> Result<Device> {
         let (pid_list, model_number_prefix) = Device::enumerate()?;
-        println!(
-            "[DEBUG] Looking for support for model: {}",
-            model_number_prefix
-        );
+        // println!(
+        //     "[DEBUG] Looking for support for model: {}",
+        //     model_number_prefix
+        // );
 
         match SUPPORTED
             .iter()
             .find(|supported| model_number_prefix.starts_with(supported.model_number_prefix))
         {
             Some(supported) => {
-                println!("[DEBUG] Found supported device: {:?}", supported);
+                // println!("[DEBUG] Found supported device: {:?}", supported);
                 Device::new(supported.clone())
             }
             None => {
-                println!("[DEBUG] Model not supported");
+                // println!("[DEBUG] Model not supported");
                 anyhow::bail!(
                     "Model {} with PIDs {:0>4x?} is not supported",
                     model_number_prefix,

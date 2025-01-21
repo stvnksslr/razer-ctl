@@ -1,6 +1,3 @@
-> [!IMPORTANT]  
-> I no longer own a Razer laptop, feel free to reach out if interested in maintaining the project.
-
 # Razer Blade control utility
 
 For those of you who
@@ -19,6 +16,12 @@ I have great news. I've reverse-engineered the Razer protocol and have crafted a
 * Keyboard brightness (works on Windows with Fn keys anyway)
 
 ![](data/demo.gif)
+
+
+## linux support
+work in progress, tray is not supported but cli currently works however it requires sudo for the moment to access the various HID
+devices.
+
 
 ## Reverse Engineering
 
