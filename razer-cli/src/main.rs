@@ -10,6 +10,7 @@ use librazer::feature::Feature;
 
 use anyhow::Result;
 use clap::{arg, Command};
+use log::{debug, error, info};
 
 trait Cli: feature::Feature {
     fn cmd(&self) -> Option<Command> {
@@ -58,12 +59,14 @@ macro_rules! impl_unary_cli {
                         let arg = matches.get_one::<$arg_type>("ARG").unwrap();
                         $setter(device, *arg)
                     }
-                    Some(("info", _)) => Ok(println!("{}: {:?}", self.name(), $getter(device))),
+                    Some(("info", _)) => {
+                        info!("{}: {:?}", self.name(), $getter(device)?);
+                        Ok(())
+                    }
                     _ => Ok(()),
                 }
             }
         }
-
     }
 }
 
@@ -104,7 +107,7 @@ impl Cli for CustomCommand {
             Some((ident, matches)) if ident == self.name() => {
                 let cmd = *matches.get_one::<u16>("COMMAND").unwrap();
                 let args: Vec<u8> = matches.get_many::<u8>("ARGS").unwrap().copied().collect();
-                println!("Running custom command: {:x?} {:?}", cmd, args);
+                debug!("Running custom command: {:x?} {:?}", cmd, args);
                 command::custom_command(device, cmd, &args)
             }
             _ => Ok(()),
@@ -139,15 +142,15 @@ impl Cli for feature::Fan {
             }
             Some(("info", _)) => {
                 match command::get_perf_mode(device) {
-                    Ok((_, fan_mode @ FanMode::Auto)) => println!("Fan: {:?}", fan_mode),
+                    Ok((_, fan_mode @ FanMode::Auto)) => info!("Fan: {:?}", fan_mode),
                     Ok((_, fan_mode @ FanMode::Manual)) => {
-                        println!(
+                        info!(
                             "Fan: {:?}@{:?} RPM",
                             fan_mode,
-                            command::get_fan_rpm(device, FanZone::Zone1)
-                        )
+                            command::get_fan_rpm(device, FanZone::Zone1)?
+                        );
                     }
-                    Err(e) => println!("{}", e),
+                    Err(e) => error!("{}", e),
                 }
                 Ok(())
             }
@@ -178,20 +181,20 @@ impl Cli for feature::Perf {
             }
             Some(("info", _)) => {
                 let perf_mode = command::get_perf_mode(device);
-                println!("Performance: {:?}", perf_mode);
+                info!("Performance: {:?}", perf_mode);
                 if let Ok((PerfMode::Custom, _)) = perf_mode {
                     let cpu_boost = command::get_cpu_boost(device);
                     let gpu_boost = command::get_gpu_boost(device);
-                    println!("CPU: {:?}", cpu_boost);
-                    println!("GPU: {:?}", gpu_boost);
+                    info!("CPU: {:?}", cpu_boost);
+                    info!("GPU: {:?}", gpu_boost);
 
                     if let (Ok(CpuBoost::Boost) | Ok(CpuBoost::Overclock), Ok(GpuBoost::High)) =
                         (cpu_boost, gpu_boost)
                     {
-                        println!(
+                        info!(
                             "Max Fan Speed: {:?}",
-                            command::get_max_fan_speed_mode(device)
-                        )
+                            command::get_max_fan_speed_mode(device)?
+                        );
                     }
                 }
                 Ok(())
@@ -204,14 +207,14 @@ impl Cli for feature::Perf {
 fn enumerate() -> Result<()> {
     let (pid_list, model_number_prefix) = device::Device::enumerate()?;
 
-    println!("Model: {}", model_number_prefix);
-    println!(
+    info!("Model: {}", model_number_prefix);
+    info!(
         "Supported: {}",
         librazer::descriptor::SUPPORTED
             .iter()
             .any(|supported| model_number_prefix == supported.model_number_prefix)
     );
-    println!("PID: {:#06x?}", pid_list);
+    info!("PID: {:#06x?}", pid_list);
     Ok(())
 }
 
@@ -228,7 +231,7 @@ fn handle(
     features: &Vec<Box<dyn Cli>>,
 ) -> Result<()> {
     if let Some(("info", _)) = matches.subcommand() {
-        println!("Device: {:?}", device.info);
+        info!("Device: {:?}", device.info);
     }
 
     for f in features {
@@ -246,6 +249,9 @@ fn gen_cli_features(feature_list: &[&str]) -> Vec<Box<dyn Cli>> {
 }
 
 fn main() -> Result<()> {
+    // Initialize logging with env_logger
+    env_logger::init();
+
     let info_cmd = clap::Command::new("info").about("Get device info");
     let auto_cmd = clap::Command::new("auto")
         .about("Automatically detect supported Razer device and enable device specific features")

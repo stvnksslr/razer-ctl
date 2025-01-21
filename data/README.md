@@ -1,4 +1,5 @@
 # Reverse engineering
+
 ## Sniff a USB port
 
 > Captured on Razer Blade 16 2023
@@ -8,13 +9,14 @@ To filter razer only packets I used filter `frame.len == 126`.
 
 Also disable all keyboard lightning, it generates a lot of traffic.
 
-An example of single packet: `144	50.302891	host	1.1.0	USBHID	126	001c000000040d0201010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000b00	SET_REPORT Request`
+An example of single packet: `144 50.302891 host 1.1.0 USBHID 126 001c000000040d0201010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000b00 SET_REPORT Request`
 
 The sniffing process begins with start capture in WireShark, then do actions in Razer Synapse and annotate which action corresponds to which USB packet.
 
 ## Process the Data
 
 I dumped some examples
+
 * [wireshark_dump_raw.csv](wireshark_dump_raw.csv) - example data capture from wireshark
 * [annotations.csv](annotations.csv) - annotations of actions
 * [extract_data_from_capture.py](extract_data_from_capture.py) - script filters out the data and keeps only annotated one

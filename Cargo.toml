@@ -3,5 +3,12 @@ resolver = "2"
 members = [ "librazer", "razer-cli", "razer-tray"]
 
 [profile.release]
-strip = true
 lto = true
+strip = true
+codegen-units = 3
+
+[profile.dev]
+codegen-units = 1
+
+[profile.test]
+codegen-units = 1
