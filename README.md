@@ -33,6 +33,15 @@ Options:
   -V, --version  Print version
 ```
 
+## Troubleshooting
+
+Ajdusting log levels
+
+```sh
+RUST_LOG=debug razer-cli ...
+RUST_LOG=info razer-cli ...
+```
+
 ## Reverse Engineering
 
 Read about the reverse engineering process for Razer Blade 16 in [data/README.md](data/README.md). You can follow the steps and adjust the utility for other Razer laptops.
