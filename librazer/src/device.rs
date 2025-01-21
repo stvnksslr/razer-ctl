@@ -2,7 +2,7 @@ use crate::descriptor::{Descriptor, SUPPORTED};
 use crate::packet::Packet;
 
 use anyhow::{anyhow, Context, Result};
-use std::{thread, time};
+use std::{fs, thread, time};
 
 pub struct Device {
     device: hidapi::HidDevice,
@@ -10,15 +10,32 @@ pub struct Device {
 }
 
 // Read the model id and clip to conform with https://mysupport.razer.com/app/answers/detail/a_id/5481
+#[cfg(target_os = "windows")]
 fn read_device_model() -> Result<String> {
-    #[cfg(target_os = "windows")]
-    {
-        let hklm = winreg::RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE);
-        let bios = hklm.open_subkey("HARDWARE\\DESCRIPTION\\System\\BIOS")?;
-        let system_sku: String = bios.get_value("SystemSKU")?;
-        Ok(system_sku.chars().take(10).collect())
+    let hklm = winreg::RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE);
+    let bios = hklm.open_subkey("HARDWARE\\DESCRIPTION\\System\\BIOS")?;
+    let system_sku: String = bios.get_value("SystemSKU")?;
+    Ok(system_sku.chars().take(10).collect())
+}
+
+#[cfg(target_os = "linux")]
+fn read_device_model() -> Result<String> {
+    let sku = fs::read_to_string("/sys/devices/virtual/dmi/id/product_sku")
+        .map(|s| s.trim().to_string())
+        .map_err(|e| anyhow::anyhow!("Failed to read product SKU: {}", e))?;
+
+    println!("[DEBUG] Linux product SKU: {}", sku);
+
+    if sku.starts_with("RZ") {
+        Ok(sku.chars().take(10).collect())
+    } else {
+        anyhow::bail!("Invalid Razer laptop SKU: {}", sku)
     }
-    #[cfg(not(target_os = "windows"))]
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+fn read_device_model() -> Result<String> {
+    println!("[DEBUG] Unsupported platform detected");
     anyhow::bail!("Automatic model detection is not implemented for this platform")
 }
 
@@ -51,7 +68,6 @@ impl Device {
     pub fn send(&self, report: Packet) -> Result<Packet> {
         // extra byte for report id
         let mut response_buf: Vec<u8> = vec![0x00; 1 + std::mem::size_of::<Packet>()];
-        //println!("Report {:?}", report);
 
         thread::sleep(time::Duration::from_micros(1000));
         self.device
@@ -72,7 +88,6 @@ impl Device {
 
         // skip report id byte
         let response = <&[u8] as TryInto<Packet>>::try_into(&response_buf[1..])?;
-        //println!("Response {:?}", response);
         response.ensure_matches_report(&report)
     }
 
@@ -86,29 +101,54 @@ impl Device {
             .collect();
 
         if razer_pid_list.is_empty() {
+            println!("[DEBUG] No Razer devices found in USB enumeration");
             anyhow::bail!("No Razer devices found")
         }
 
+        println!(
+            "[DEBUG] Found Razer devices with PIDs: {:?}",
+            razer_pid_list
+        );
+
         match read_device_model() {
-            Ok(model) if model.starts_with("RZ09-") => Ok((razer_pid_list, model)),
-            Ok(model) => anyhow::bail!("Detected model but it's not a Razer laptop: {}", model),
-            Err(e) => anyhow::bail!("Failed to detect model: {}", e),
+            Ok(model) => {
+                println!("[DEBUG] Detected model number: {}", model);
+                if model.starts_with("RZ09-") {
+                    Ok((razer_pid_list, model))
+                } else {
+                    anyhow::bail!("Detected model but it's not a Razer laptop: {}", model)
+                }
+            }
+            Err(e) => {
+                println!("[DEBUG] Failed to detect model: {}", e);
+                anyhow::bail!("Failed to detect model: {}", e)
+            }
         }
     }
 
     pub fn detect() -> Result<Device> {
         let (pid_list, model_number_prefix) = Device::enumerate()?;
+        println!(
+            "[DEBUG] Looking for support for model: {}",
+            model_number_prefix
+        );
 
         match SUPPORTED
             .iter()
-            .find(|supported| model_number_prefix == supported.model_number_prefix)
+            .find(|supported| model_number_prefix.starts_with(supported.model_number_prefix))
         {
-            Some(supported) => Device::new(supported.clone()),
-            None => anyhow::bail!(
-                "Model {} with PIDs {:0>4x?} is not supported",
-                model_number_prefix,
-                pid_list
-            ),
+            Some(supported) => {
+                println!("[DEBUG] Found supported device: {:?}", supported);
+                Device::new(supported.clone())
+            }
+            None => {
+                println!("[DEBUG] Model not supported");
+                anyhow::bail!(
+                    "Model {} with PIDs {:0>4x?} is not supported",
+                    model_number_prefix,
+                    pid_list
+                )
+            }
         }
     }
 }
