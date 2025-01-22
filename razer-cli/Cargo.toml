@@ -10,3 +10,5 @@ librazer = { path = "../librazer" }
 clap = { version = "4.5.1", features = ["cargo"] }
 clap-num = "1.1.1"
 anyhow = "1.0.80"
+log = "0.4.22"
+env_logger = "0.11.6"

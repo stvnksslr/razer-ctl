@@ -4,8 +4,8 @@ use crate::types::{
     BatteryCare, Cluster, CpuBoost, FanMode, FanZone, GpuBoost, LightsAlwaysOn, LogoMode,
     MaxFanSpeedMode, PerfMode,
 };
-
 use anyhow::{bail, ensure, Result};
+use log::debug;
 
 fn _send_command(device: &Device, command: u16, args: &[u8]) -> Result<Packet> {
     let response = device.send(Packet::new(command, args))?;
@@ -71,7 +71,6 @@ pub fn get_perf_mode(device: &Device) -> Result<(PerfMode, FanMode)> {
     let r1 = r1?;
     let r2 = r2?;
 
-    //let r1 = r1?;
     ensure!(r1 == r2, "Modes do not match: {:?} {:?}", r1, r2);
 
     Ok(r1)
@@ -138,9 +137,9 @@ pub fn set_fan_mode(device: &Device, mode: FanMode) -> Result<()> {
 
 pub fn custom_command(device: &Device, command: u16, args: &[u8]) -> Result<()> {
     let report = Packet::new(command, args);
-    println!("Report   {:?}", report);
+    debug!("Report   {:?}", report);
     let response = device.send(report)?;
-    println!("Response {:?}", response);
+    debug!("Response {:?}", response);
     Ok(())
 }
 
