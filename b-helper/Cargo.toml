@@ -1,0 +1,10 @@
+[package]
+name = "b-helper"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+iced = { version = "0.10", features = ["advanced"] }
+librazer = { path = "../librazer" }
+anyhow = "1.0.80"
+rand = "0.8.5"
