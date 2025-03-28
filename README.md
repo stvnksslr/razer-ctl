@@ -1,21 +1,20 @@
-# Razer Blade control utility
+# Razer Blade Control Utlity
 
-* own a Razer Blade 16 2023 or Razor Blade 14 2023
-* use Windows 11 or Linux
-* want better battery life ex. synapse doesnt allow silent mode on battery depsite it making a huge difference
+The goal of this project is to build a crossplatform tool for controlling razer laptops bios settings without using synapse.
+One of the biggest benefits of using this tool over synapse is the ability to set your laptop bios to silent mode while on battery
+which for some inexplicable reason is not available in synapse. This improved my battery life on linux from ~4 hours to a consistent 7~
+on a 2023 blade 14.
 
-I have great news. I've reverse-engineered the Razer protocol and have crafted an alternative solution. A drop-in predictable and compact Razer Synapse alternative.
+# Current Support
 
-## What can it control?
+- 2023 blades (14,15,16)
+- 2024 blades (14,15,16)
 
-* Performance modes (including overclock)
-* Lid logo modes: off, static, breathing
-* Keyboard brightness (works on Windows with Fn keys anyway)
+# Current Features
 
-## linux support
-
-work in progress, tray is not supported but cli currently works however it requires sudo for the moment to access the various HID
-devices.
+Performance modes (including overclock)
+Lid logo modes (if available): off, static, breathing
+Keyboard brightness
 
 ## Usage
 
@@ -24,22 +23,13 @@ Usage: razer-cli <COMMAND>
 
 Commands:
   auto       Automatically detect supported Razer device and enable device specific features
-  manual     Manually specify PID of the Razer device and enable all features (many might not work)
+  manual     Manually specify PID of the Razer device and enable all features
   enumerate  List discovered Razer devices
-  help       Print this message or the help of the given subcommand(s)
+  help       print the help commands
 
 Options:
   -h, --help     Print help
   -V, --version  Print version
-```
-
-## Troubleshooting
-
-Ajdusting log levels
-
-```sh
-RUST_LOG=debug razer-cli ...
-RUST_LOG=info razer-cli ...
 ```
 
 ## Reverse Engineering
@@ -51,6 +41,7 @@ Then `razer-cli -p 0xPID info` to check if the application works for your Razer 
 
 Special thanks to
 
-* [razer-ctl](https://github.com/tdakhran/razer-ctl) the original project that did the absurd amount of work to get this going
-* [openrazer](https://github.com/openrazer) for [Reverse-Engineering-USB-Protocol](https://github.com/openrazer/openrazer/wiki/Reverse-Engineering-USB-Protocol)
-* [Razer-Linux](https://github.com/Razer-Linux/razer-laptop-control-no-dkms) for USB HID protocol implementation
+- [tdakhran](https://github.com/tdakhran) who created the first version of the tool
+- [razer-ctl](https://github.com/tdakhran/razer-ctl) the original project that did the absurd amount of work to get this going
+- [openrazer](https://github.com/openrazer) for [Reverse-Engineering-USB-Protocol](https://github.com/openrazer/openrazer/wiki/Reverse-Engineering-USB-Protocol)
+- [Razer-Linux](https://github.com/Razer-Linux/razer-laptop-control-no-dkms) for USB HID protocol implementation
