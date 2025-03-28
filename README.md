@@ -8,7 +8,7 @@ on a 2023 blade 14.
 # Current Support
 
 - 2023 blades (14,15,16)
-- 2024 blades (14,15,16)
+- 2024 blades (14,16)
 
 # Current Features
 
