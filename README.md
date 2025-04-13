@@ -2,7 +2,7 @@
 
 The goal of this project is to build a crossplatform tool for controlling razer laptops bios settings without using synapse.
 One of the biggest benefits of using this tool over synapse is the ability to set your laptop bios to silent mode while on battery
-which for some inexplicable reason is not available in synapse. This improved my battery life on linux from ~4 hours to a consistent 7~
+which for some inexplicable reason is not available in synapse. This improved my battery life on linux from 4ish hours to a consistent 7
 on a 2023 blade 14.
 
 # Current Support
