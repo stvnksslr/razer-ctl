@@ -3,7 +3,7 @@ use crate::packet::Packet;
 
 use anyhow::{anyhow, Context, Result};
 use log::{debug, error};
-use std::{thread, time};
+use std::{thread, time, fs};
 
 pub struct Device {
     device: hidapi::HidDevice,

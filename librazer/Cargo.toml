@@ -24,4 +24,4 @@ winreg = { version = "0.55", features = ["transactions"] }
 hidapi = { version = "2.6.1", features = ["windows-native"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-hidapi = { version = "2.6.1", features = ["linux-native"] }
+hidapi = { version = "2.6.1", features = ["linux-static-hidraw"] }
