@@ -1,0 +1,190 @@
+name: Issue Tracker
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  track-issues:
+    name: Track Issue Changes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install beads CLI
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Export base branch issues
+        run: |
+          # Checkout base branch issues.jsonl to temp location
+          git show origin/${{ github.base_ref }}:.beads/issues.jsonl > /tmp/base_issues.jsonl 2>/dev/null || echo "" > /tmp/base_issues.jsonl
+
+      - name: Export PR branch issues
+        run: |
+          # Use bd to export current issues
+          bd export --no-db -o /tmp/pr_issues.jsonl 2>/dev/null || cp .beads/issues.jsonl /tmp/pr_issues.jsonl 2>/dev/null || echo "" > /tmp/pr_issues.jsonl
+
+      - name: Analyze issue changes
+        id: analyze
+        run: |
+          # Create indexed maps of issues from both branches using jq
+          # Base branch: id -> {status, title}
+          if [ -s /tmp/base_issues.jsonl ]; then
+            jq -s 'map({(.id): {status: .status, title: .title}}) | add // {}' /tmp/base_issues.jsonl > /tmp/base_map.json
+          else
+            echo '{}' > /tmp/base_map.json
+          fi
+
+          # PR branch: id -> {status, title, close_reason}
+          if [ -s /tmp/pr_issues.jsonl ]; then
+            jq -s 'map({(.id): {status: .status, title: .title, close_reason: .close_reason}}) | add // {}' /tmp/pr_issues.jsonl > /tmp/pr_map.json
+          else
+            echo '{}' > /tmp/pr_map.json
+          fi
+
+          # Find new issues (in PR but not in base)
+          new_issues=$(jq -s '
+            .[0] as $base | .[1] as $pr |
+            $pr | to_entries | map(select(.key as $k | $base[$k] == null)) |
+            map("- **\(.key)** [\(.value.status)]: \(.value.title)") | join("\n")
+          ' /tmp/base_map.json /tmp/pr_map.json)
+
+          new_count=$(jq -s '
+            .[0] as $base | .[1] as $pr |
+            $pr | to_entries | map(select(.key as $k | $base[$k] == null)) | length
+          ' /tmp/base_map.json /tmp/pr_map.json)
+
+          # Find closed issues (status changed from open/in_progress to closed)
+          closed_issues=$(jq -s '
+            .[0] as $base | .[1] as $pr |
+            $pr | to_entries | map(
+              select(
+                .value.status == "closed" and
+                .key as $k | $base[$k] != null and $base[$k].status != "closed"
+              )
+            ) |
+            map("- **\(.key)**: \(.value.title)\n  - _Reason: \(.value.close_reason // "No reason provided")_") |
+            join("\n")
+          ' /tmp/base_map.json /tmp/pr_map.json)
+
+          closed_count=$(jq -s '
+            .[0] as $base | .[1] as $pr |
+            $pr | to_entries | map(
+              select(
+                .value.status == "closed" and
+                .key as $k | $base[$k] != null and $base[$k].status != "closed"
+              )
+            ) | length
+          ' /tmp/base_map.json /tmp/pr_map.json)
+
+          # Find reopened issues (status changed from closed to open/in_progress)
+          reopened_issues=$(jq -s '
+            .[0] as $base | .[1] as $pr |
+            $pr | to_entries | map(
+              select(
+                .value.status != "closed" and
+                .key as $k | $base[$k] != null and $base[$k].status == "closed"
+              )
+            ) |
+            map("- **\(.key)**: \(.value.title)") | join("\n")
+          ' /tmp/base_map.json /tmp/pr_map.json)
+
+          reopened_count=$(jq -s '
+            .[0] as $base | .[1] as $pr |
+            $pr | to_entries | map(
+              select(
+                .value.status != "closed" and
+                .key as $k | $base[$k] != null and $base[$k].status == "closed"
+              )
+            ) | length
+          ' /tmp/base_map.json /tmp/pr_map.json)
+
+          # Build report
+          {
+            echo "## New Issues Created"
+            echo ""
+            if [ "$new_count" -gt 0 ]; then
+              echo "$new_issues"
+            else
+              echo "_No new issues created_"
+            fi
+            echo ""
+            echo "## Issues Closed"
+            echo ""
+            if [ "$closed_count" -gt 0 ]; then
+              echo "$closed_issues"
+            else
+              echo "_No issues closed_"
+            fi
+            echo ""
+            echo "## Issues Reopened"
+            echo ""
+            if [ "$reopened_count" -gt 0 ]; then
+              echo "$reopened_issues"
+            else
+              echo "_No issues reopened_"
+            fi
+            echo ""
+            echo "---"
+            echo "**Summary:** ${new_count} created, ${closed_count} closed, ${reopened_count} reopened"
+          } > /tmp/report.md
+
+          # Set outputs
+          if [ "$new_count" -gt 0 ] || [ "$closed_count" -gt 0 ] || [ "$reopened_count" -gt 0 ]; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
+
+          {
+            echo 'report<<EOF'
+            cat /tmp/report.md
+            echo 'EOF'
+          } >> $GITHUB_OUTPUT
+
+      - name: Comment on PR
+        if: steps.analyze.outputs.has_changes == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const report = `${{ steps.analyze.outputs.report }}`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes('## New Issues Created')
+            );
+
+            const body = `# 📋 Issue Tracker Report\n\n${report}`;
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }

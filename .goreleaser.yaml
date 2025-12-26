@@ -1,0 +1,38 @@
+version: 2
+
+before:
+  hooks:
+    - rustup default stable
+    - cargo install --locked cargo-zigbuild
+    - cargo fetch --locked
+
+builds:
+  - builder: rust
+    dir: blade-helper
+    flags:
+      - --release
+    targets:
+      - x86_64-unknown-linux-gnu
+      - aarch64-unknown-linux-gnu
+      - x86_64-pc-windows-gnu
+    id: "blade-helper"
+    binary: blade-helper
+
+archives:
+  - formats: ["tar.gz"]
+    format_overrides:
+      - goos: windows
+        formats: ["zip"]
+    files:
+      - none*
+    name_template: >-
+      {{ .ProjectName }}-{{ .Target }}
+    builds:
+      - blade-helper
+
+changelog:
+  disable: true
+
+release:
+  footer: >-
+    Released by [GoReleaser](https://goreleaser.com)

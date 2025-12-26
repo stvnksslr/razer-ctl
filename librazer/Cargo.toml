@@ -2,6 +2,11 @@
 name = "librazer"
 version = "0.7.0"
 edition = "2021"
+description = "Library for controlling Razer laptop BIOS settings via USB HID"
+license = "MIT"
+repository = "https://github.com/stvnksslr/razer-ctl"
+keywords = ["razer", "blade", "laptop", "bios", "hid"]
+categories = ["hardware-support"]
 
 [dependencies]
 anyhow = "1.0.80"

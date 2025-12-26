@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = [ "librazer", "razer-cli"]
+members = [ "librazer", "blade-helper"]
 
 [profile.release]
 lto = true
