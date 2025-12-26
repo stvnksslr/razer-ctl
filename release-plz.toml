@@ -5,13 +5,13 @@ semver_check = false
 # librazer - core library (publish to crates.io)
 [[package]]
 name = "librazer"
-changelog_include = ["librazer/**"]
+changelog_include = ["librazer"]
 publish = true
 
 # blade-helper - CLI application (GitHub releases only, not crates.io)
 [[package]]
 name = "blade-helper"
-changelog_include = ["blade-helper/**"]
+changelog_include = ["blade-helper"]
 publish = false
 git_release_enable = true
 

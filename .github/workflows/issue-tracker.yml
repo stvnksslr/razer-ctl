@@ -215,6 +215,7 @@ jobs:
           } >> $GITHUB_OUTPUT
 
       - name: Comment on PR
+        if: steps.analyze.outputs.has_changes == 'true' || steps.analyze.outputs.first_time == 'true'
         uses: actions/github-script@v7
         with:
           script: |
