@@ -159,3 +159,71 @@ impl TryFrom<u8> for MaxFanSpeedMode {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_perf_mode_try_from() {
+        assert_eq!(PerfMode::try_from(0).unwrap(), PerfMode::Balanced);
+        assert_eq!(PerfMode::try_from(5).unwrap(), PerfMode::Silent);
+        assert_eq!(PerfMode::try_from(4).unwrap(), PerfMode::Custom);
+        assert!(PerfMode::try_from(99).is_err());
+    }
+
+    #[test]
+    fn test_fan_mode_try_from() {
+        assert_eq!(FanMode::try_from(0).unwrap(), FanMode::Auto);
+        assert_eq!(FanMode::try_from(1).unwrap(), FanMode::Manual);
+        assert!(FanMode::try_from(2).is_err());
+    }
+
+    #[test]
+    fn test_cpu_boost_try_from() {
+        assert_eq!(CpuBoost::try_from(0).unwrap(), CpuBoost::Low);
+        assert_eq!(CpuBoost::try_from(1).unwrap(), CpuBoost::Medium);
+        assert_eq!(CpuBoost::try_from(2).unwrap(), CpuBoost::High);
+        assert_eq!(CpuBoost::try_from(3).unwrap(), CpuBoost::Boost);
+        assert_eq!(CpuBoost::try_from(4).unwrap(), CpuBoost::Overclock);
+        assert!(CpuBoost::try_from(5).is_err());
+    }
+
+    #[test]
+    fn test_gpu_boost_try_from() {
+        assert_eq!(GpuBoost::try_from(0).unwrap(), GpuBoost::Low);
+        assert_eq!(GpuBoost::try_from(1).unwrap(), GpuBoost::Medium);
+        assert_eq!(GpuBoost::try_from(2).unwrap(), GpuBoost::High);
+        assert!(GpuBoost::try_from(3).is_err());
+    }
+
+    #[test]
+    fn test_lights_always_on_try_from() {
+        assert_eq!(
+            LightsAlwaysOn::try_from(0).unwrap(),
+            LightsAlwaysOn::Disable
+        );
+        assert_eq!(LightsAlwaysOn::try_from(3).unwrap(), LightsAlwaysOn::Enable);
+        assert!(LightsAlwaysOn::try_from(1).is_err());
+    }
+
+    #[test]
+    fn test_battery_care_try_from() {
+        assert_eq!(BatteryCare::try_from(0x50).unwrap(), BatteryCare::Disable);
+        assert_eq!(BatteryCare::try_from(0xd0).unwrap(), BatteryCare::Enable);
+        assert!(BatteryCare::try_from(0x00).is_err());
+    }
+
+    #[test]
+    fn test_max_fan_speed_mode_try_from() {
+        assert_eq!(
+            MaxFanSpeedMode::try_from(0x00).unwrap(),
+            MaxFanSpeedMode::Disable
+        );
+        assert_eq!(
+            MaxFanSpeedMode::try_from(0x02).unwrap(),
+            MaxFanSpeedMode::Enable
+        );
+        assert!(MaxFanSpeedMode::try_from(0x01).is_err());
+    }
+}

@@ -15,6 +15,11 @@ macro_rules! feature_list {
                     map_ascii_case!(Case::Kebab, stringify!($type))
                 }
             }
+
+            paste::paste! {
+                #[doc = "Feature name constant for " $type]
+                pub const [<$type:upper>]: &str = map_ascii_case!(Case::Kebab, stringify!($type));
+            }
         )*
 
         pub const ALL_FEATURES: &[&'static str] = &[
@@ -71,3 +76,45 @@ feature_list![
     Fan,
     Perf,
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_feature_names_are_kebab_case() {
+        assert_eq!(BatteryCare::default().name(), "battery-care");
+        assert_eq!(LidLogo::default().name(), "lid-logo");
+        assert_eq!(LightsAlwaysOn::default().name(), "lights-always-on");
+        assert_eq!(KbdBacklight::default().name(), "kbd-backlight");
+        assert_eq!(Fan::default().name(), "fan");
+        assert_eq!(Perf::default().name(), "perf");
+    }
+
+    #[test]
+    fn test_feature_constants_match_names() {
+        assert_eq!(BATTERYCARE, "battery-care");
+        assert_eq!(LIDLOGO, "lid-logo");
+        assert_eq!(LIGHTSALWAYSON, "lights-always-on");
+        assert_eq!(KBDBACKLIGHT, "kbd-backlight");
+        assert_eq!(FAN, "fan");
+        assert_eq!(PERF, "perf");
+    }
+
+    #[test]
+    fn test_all_features_contains_all() {
+        assert!(ALL_FEATURES.contains(&"battery-care"));
+        assert!(ALL_FEATURES.contains(&"lid-logo"));
+        assert!(ALL_FEATURES.contains(&"lights-always-on"));
+        assert!(ALL_FEATURES.contains(&"kbd-backlight"));
+        assert!(ALL_FEATURES.contains(&"fan"));
+        assert!(ALL_FEATURES.contains(&"perf"));
+        assert_eq!(ALL_FEATURES.len(), 6);
+    }
+
+    #[test]
+    fn test_validate_features_accepts_valid() {
+        // Should not panic
+        validate_features(&["battery-care", "fan", "perf"]);
+    }
+}

@@ -268,18 +268,8 @@ fn main() -> Result<()> {
             .subcommand(info_cmd)
             .subcommand_required(true);
 
-    // TODO: find a better way to detect auto mode in advance
-    let is_auto_mode = std::env::args_os().nth(1) == Some("auto".into());
-    let device = match is_auto_mode {
-        true => Some(device::Device::detect()?),
-        _ => None,
-    };
-    let feature_list = match device {
-        Some(ref device) => device.info.features,
-        _ => feature::ALL_FEATURES,
-    };
-
-    let mut cli_features: Vec<Box<dyn Cli>> = gen_cli_features(feature_list);
+    // Build CLI with all features for help text, detect device lazily when needed
+    let mut cli_features: Vec<Box<dyn Cli>> = gen_cli_features(feature::ALL_FEATURES);
     cli_features.push(Box::new(CustomCommand));
 
     let cmd = clap::command!()
@@ -296,7 +286,10 @@ fn main() -> Result<()> {
             enumerate()?;
         }
         Some(("auto", submatches)) => {
-            handle(&device.unwrap(), submatches, &cli_features)?;
+            // Detect device only when actually running auto mode (not for --help)
+            let device = device::Device::detect()?;
+            let device_features = gen_cli_features(device.info.features);
+            handle(&device, submatches, &device_features)?;
         }
         Some(("manual", submatches)) => {
             let device = device::Device::new(librazer::descriptor::Descriptor {
