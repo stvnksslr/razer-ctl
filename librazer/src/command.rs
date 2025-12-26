@@ -40,19 +40,19 @@ mod cmd {
     pub const GET_BATTERY_CARE: u16 = 0x0792;
 }
 
-fn _send_command(device: &Device, command: u16, args: &[u8]) -> Result<Packet> {
+fn send_command(device: &Device, command: u16, args: &[u8]) -> Result<Packet> {
     let response = device.send(Packet::new(command, args))?;
     ensure!(response.get_args().starts_with(args));
     Ok(response)
 }
 
-fn _set_perf_mode(device: &Device, perf_mode: PerfMode, fan_mode: FanMode) -> Result<()> {
+fn set_perf_mode_internal(device: &Device, perf_mode: PerfMode, fan_mode: FanMode) -> Result<()> {
     if (fan_mode == FanMode::Manual) && (perf_mode != PerfMode::Balanced) {
         bail!("{:?} allowed only in {:?}", fan_mode, PerfMode::Balanced);
     }
 
     [1, 2].into_iter().try_for_each(|zone| {
-        _send_command(
+        send_command(
             device,
             cmd::SET_PERF_MODE,
             &[0x01, zone, perf_mode as u8, fan_mode as u8],
@@ -61,7 +61,7 @@ fn _set_perf_mode(device: &Device, perf_mode: PerfMode, fan_mode: FanMode) -> Re
     })
 }
 
-fn _set_boost(device: &Device, cluster: Cluster, boost: u8) -> Result<()> {
+fn set_boost_internal(device: &Device, cluster: Cluster, boost: u8) -> Result<()> {
     let args = &[0, cluster as u8, boost];
     ensure!(
         get_perf_mode(device)? == (PerfMode::Custom, FanMode::Auto),
@@ -75,7 +75,7 @@ fn _set_boost(device: &Device, cluster: Cluster, boost: u8) -> Result<()> {
     Ok(())
 }
 
-fn _get_boost(device: &Device, cluster: Cluster) -> Result<u8> {
+fn get_boost_internal(device: &Device, cluster: Cluster) -> Result<u8> {
     let response = device.send(Packet::new(cmd::GET_BOOST, &[0, cluster as u8, 0]))?;
     ensure!(response.get_args()[1] == cluster as u8);
     Ok(response.get_args()[2])
@@ -85,7 +85,7 @@ fn _get_boost(device: &Device, cluster: Cluster) -> Result<u8> {
 ///
 /// Fan mode is automatically set to Auto. Use [`set_fan_mode`] to switch to manual fan control.
 pub fn set_perf_mode(device: &Device, perf_mode: PerfMode) -> Result<()> {
-    _set_perf_mode(device, perf_mode, FanMode::Auto)
+    set_perf_mode_internal(device, perf_mode, FanMode::Auto)
 }
 
 /// Gets the current performance mode and fan mode.
@@ -115,22 +115,22 @@ pub fn get_perf_mode(device: &Device) -> Result<(PerfMode, FanMode)> {
 
 /// Sets the CPU boost level. Requires Custom performance mode.
 pub fn set_cpu_boost(device: &Device, boost: CpuBoost) -> Result<()> {
-    _set_boost(device, Cluster::Cpu, boost as u8)
+    set_boost_internal(device, Cluster::Cpu, boost as u8)
 }
 
 /// Sets the GPU boost level. Requires Custom performance mode.
 pub fn set_gpu_boost(device: &Device, boost: GpuBoost) -> Result<()> {
-    _set_boost(device, Cluster::Gpu, boost as u8)
+    set_boost_internal(device, Cluster::Gpu, boost as u8)
 }
 
 /// Gets the current CPU boost level.
 pub fn get_cpu_boost(device: &Device) -> Result<CpuBoost> {
-    CpuBoost::try_from(_get_boost(device, Cluster::Cpu)?)
+    CpuBoost::try_from(get_boost_internal(device, Cluster::Cpu)?)
 }
 
 /// Gets the current GPU boost level.
 pub fn get_gpu_boost(device: &Device) -> Result<GpuBoost> {
-    GpuBoost::try_from(_get_boost(device, Cluster::Gpu)?)
+    GpuBoost::try_from(get_boost_internal(device, Cluster::Gpu)?)
 }
 
 /// Sets the fan speed in RPM. Valid range is 2000-5000.
@@ -147,7 +147,7 @@ pub fn set_fan_rpm(device: &Device, rpm: u16) -> Result<()> {
     [FanZone::Zone1, FanZone::Zone2]
         .into_iter()
         .try_for_each(|zone| {
-            _send_command(
+            send_command(
                 device,
                 cmd::SET_FAN_RPM,
                 &[0, zone as u8, (rpm / 100) as u8],
@@ -170,7 +170,7 @@ pub fn set_max_fan_speed_mode(device: &Device, mode: MaxFanSpeedMode) -> Result<
         "Performance mode must be {:?}",
         PerfMode::Custom
     );
-    _send_command(device, cmd::SET_MAX_FAN_SPEED, &[mode as u8]).map(|_| ())
+    send_command(device, cmd::SET_MAX_FAN_SPEED, &[mode as u8]).map(|_| ())
 }
 
 /// Gets the current max fan speed mode setting.
@@ -188,7 +188,7 @@ pub fn set_fan_mode(device: &Device, mode: FanMode) -> Result<()> {
         "Performance mode must be {:?}",
         PerfMode::Balanced
     );
-    _set_perf_mode(device, PerfMode::Balanced, mode)
+    set_perf_mode_internal(device, PerfMode::Balanced, mode)
 }
 
 /// Sends a custom USB HID command to the device.
@@ -203,24 +203,24 @@ pub fn custom_command(device: &Device, command: u16, args: &[u8]) -> Result<()> 
     Ok(())
 }
 
-fn _set_logo_power(device: &Device, mode: LogoMode) -> Result<Packet> {
+fn set_logo_power(device: &Device, mode: LogoMode) -> Result<Packet> {
     match mode {
-        LogoMode::Off => _send_command(device, cmd::SET_LOGO_POWER, &[1, 4, 0]),
+        LogoMode::Off => send_command(device, cmd::SET_LOGO_POWER, &[1, 4, 0]),
         LogoMode::Static | LogoMode::Breathing => {
-            _send_command(device, cmd::SET_LOGO_POWER, &[1, 4, 1])
+            send_command(device, cmd::SET_LOGO_POWER, &[1, 4, 1])
         }
     }
 }
 
-fn _set_logo_mode(device: &Device, mode: LogoMode) -> Result<Packet> {
+fn set_logo_mode_internal(device: &Device, mode: LogoMode) -> Result<Packet> {
     match mode {
-        LogoMode::Static => _send_command(device, cmd::SET_LOGO_MODE, &[1, 4, 0]),
-        LogoMode::Breathing => _send_command(device, cmd::SET_LOGO_MODE, &[1, 4, 2]),
+        LogoMode::Static => send_command(device, cmd::SET_LOGO_MODE, &[1, 4, 0]),
+        LogoMode::Breathing => send_command(device, cmd::SET_LOGO_MODE, &[1, 4, 2]),
         _ => bail!("Invalid logo mode"),
     }
 }
 
-fn _get_logo_power(device: &Device) -> Result<bool> {
+fn get_logo_power(device: &Device) -> Result<bool> {
     match device
         .send(Packet::new(cmd::GET_LOGO_POWER, &[1, 4, 0]))?
         .get_args()[2]
@@ -231,7 +231,7 @@ fn _get_logo_power(device: &Device) -> Result<bool> {
     }
 }
 
-fn _get_logo_mode(device: &Device) -> Result<LogoMode> {
+fn get_logo_mode_internal(device: &Device) -> Result<LogoMode> {
     match device
         .send(Packet::new(cmd::GET_LOGO_MODE, &[1, 4, 0]))?
         .get_args()[2]
@@ -244,9 +244,9 @@ fn _get_logo_mode(device: &Device) -> Result<LogoMode> {
 
 /// Gets the current lid logo mode (Off, Static, or Breathing).
 pub fn get_logo_mode(device: &Device) -> Result<LogoMode> {
-    let power = _get_logo_power(device)?;
+    let power = get_logo_power(device)?;
     match power {
-        true => _get_logo_mode(device),
+        true => get_logo_mode_internal(device),
         false => Ok(LogoMode::Off),
     }
 }
@@ -254,9 +254,9 @@ pub fn get_logo_mode(device: &Device) -> Result<LogoMode> {
 /// Sets the lid logo mode (Off, Static, or Breathing).
 pub fn set_logo_mode(device: &Device, mode: LogoMode) -> Result<()> {
     if mode != LogoMode::Off {
-        _set_logo_mode(device, mode)?;
+        set_logo_mode_internal(device, mode)?;
     }
-    _set_logo_power(device, mode)?;
+    set_logo_power(device, mode)?;
     Ok(())
 }
 

@@ -81,12 +81,6 @@ impl Packet {
         crc
     }
 
-    /// Updates the packet arguments and recalculates the CRC.
-    pub fn set_args(&mut self, args: &[u8]) {
-        self.args[..args.len()].copy_from_slice(args);
-        self.crc = self.calculate_crc();
-    }
-
     /// Returns the valid argument bytes (up to data_size).
     pub fn get_args(&self) -> &[u8] {
         &self.args[..self.data_size as usize]
@@ -186,15 +180,6 @@ mod tests {
         let packet = Packet::new(0x0d02, &[0x01, 0x02]);
         // CRC should be non-zero for non-trivial packets
         assert_ne!(packet.crc, 0);
-    }
-
-    #[test]
-    fn test_packet_set_args_updates_crc() {
-        let mut packet = Packet::new(0x0d02, &[0x01]);
-        let crc1 = packet.crc;
-        packet.set_args(&[0x01, 0x02, 0x03]);
-        // CRC should change when args change
-        assert_ne!(packet.crc, crc1);
     }
 
     #[test]

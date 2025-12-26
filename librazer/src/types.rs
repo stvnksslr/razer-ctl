@@ -15,14 +15,14 @@ pub enum FanZone {
     Zone2 = 0x02,
 }
 
-#[derive(EnumIter, Clone, Copy, Debug, PartialEq, ValueEnum)]
+#[derive(Clone, Copy, Debug, PartialEq, EnumIter, ValueEnum)]
 pub enum PerfMode {
     Balanced = 0,
     Silent = 5,
     Custom = 4,
 }
 
-#[derive(EnumIter, Clone, Copy, Debug, ValueEnum, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, EnumIter, ValueEnum)]
 pub enum MaxFanSpeedMode {
     Enable = 2,
     Disable = 0,
@@ -34,7 +34,7 @@ pub enum FanMode {
     Manual = 1,
 }
 
-#[derive(EnumIter, Clone, Copy, Debug, ValueEnum, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, EnumIter, ValueEnum)]
 pub enum CpuBoost {
     Low = 0,
     Medium = 1,
@@ -43,29 +43,27 @@ pub enum CpuBoost {
     Overclock = 4,
 }
 
-#[derive(EnumIter, Clone, Copy, Debug, ValueEnum, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, EnumIter, ValueEnum)]
 pub enum GpuBoost {
     Low = 0,
     Medium = 1,
     High = 2,
 }
 
-#[derive(
-    EnumString, EnumIter, Clone, Copy, Debug, ValueEnum, PartialEq, Serialize, Deserialize,
-)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, EnumIter, EnumString, ValueEnum)]
 pub enum LogoMode {
     Off,
     Breathing,
     Static,
 }
 
-#[derive(EnumString, ValueEnum, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, EnumString, ValueEnum)]
 pub enum LightsAlwaysOn {
     Enable = 0x03,
     Disable = 0x00,
 }
 
-#[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, ValueEnum)]
 pub enum BatteryCare {
     Disable = 0x50,
     Enable = 0xd0,
