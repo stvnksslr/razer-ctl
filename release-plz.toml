@@ -1,12 +1,14 @@
 [workspace]
 changelog_update = true
 semver_check = false
+release_always = false
 
 # librazer - core library (publish to crates.io)
 [[package]]
 name = "librazer"
 changelog_include = ["librazer"]
 publish = true
+git_release_enable = false
 
 # blade-helper - CLI application (GitHub releases only, not crates.io)
 [[package]]
