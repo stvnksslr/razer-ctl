@@ -53,69 +53,90 @@ jobs:
             echo '{}' > /tmp/pr_map.json
           fi
 
-          # Find new issues (in PR but not in base)
-          new_issues=$(jq -s '
-            .[0] as $base | .[1] as $pr |
-            $pr | to_entries | map(select(.key as $k | $base[$k] == null)) |
-            map("- **\(.key)** [\(.value.status)]: \(.value.title)") | join("\n")
-          ' /tmp/base_map.json /tmp/pr_map.json)
+          # Check if this is the first time beads is being added
+          base_count=$(jq 'length' /tmp/base_map.json)
+          if [ "$base_count" -eq 0 ]; then
+            echo "first_time=true" >> $GITHUB_OUTPUT
+          else
+            echo "first_time=false" >> $GITHUB_OUTPUT
+          fi
 
-          new_count=$(jq -s '
+          # Helper function to format issues hierarchically
+          # Issue ID format: prefix-XXX (root), prefix-XXX.N (child), prefix-XXX.N.N (grandchild)
+          format_hierarchical() {
+            local input_file=$1
+            local include_reason=$2
+
+            jq -rs '
+              # Calculate depth based on dot count in ID
+              def depth: (split(".") | length) - 1;
+
+              # Get parent ID (remove last .N segment)
+              def parent_id:
+                if contains(".") then
+                  split(".") | .[:-1] | join(".")
+                else
+                  null
+                end;
+
+              # Sort by ID to ensure parents come before children
+              sort_by(.key) |
+
+              # Format each issue with proper indentation
+              .[] |
+              (.key | depth) as $d |
+              (if $d == 0 then "- " elif $d == 1 then "  - " else "    - " end) as $indent |
+              if '"$include_reason"' == "true" then
+                "\($indent)**\(.key)** [\(.value.status)]: \(.value.title)\n\($indent)  _Reason: \(.value.close_reason // "No reason provided")_"
+              else
+                "\($indent)**\(.key)** [\(.value.status)]: \(.value.title)"
+              end
+            ' "$input_file"
+          }
+
+          # Find new issues (in PR but not in base)
+          jq -s '
             .[0] as $base | .[1] as $pr |
-            $pr | to_entries | map(select(.key as $k | $base[$k] == null)) | length
-          ' /tmp/base_map.json /tmp/pr_map.json)
+            $pr | to_entries | map(select(.key as $k | $base[$k] == null))
+          ' /tmp/base_map.json /tmp/pr_map.json > /tmp/new_issues.json
+
+          new_count=$(jq 'length' /tmp/new_issues.json)
+          format_hierarchical /tmp/new_issues.json "false" > /tmp/new_issues.txt
 
           # Find closed issues (status changed from open/in_progress to closed)
-          closed_issues=$(jq -s '
+          jq -s '
             .[0] as $base | .[1] as $pr |
             $pr | to_entries | map(
               select(
                 .value.status == "closed" and
                 .key as $k | $base[$k] != null and $base[$k].status != "closed"
               )
-            ) |
-            map("- **\(.key)**: \(.value.title)\n  - _Reason: \(.value.close_reason // "No reason provided")_") |
-            join("\n")
-          ' /tmp/base_map.json /tmp/pr_map.json)
+            )
+          ' /tmp/base_map.json /tmp/pr_map.json > /tmp/closed_issues.json
 
-          closed_count=$(jq -s '
-            .[0] as $base | .[1] as $pr |
-            $pr | to_entries | map(
-              select(
-                .value.status == "closed" and
-                .key as $k | $base[$k] != null and $base[$k].status != "closed"
-              )
-            ) | length
-          ' /tmp/base_map.json /tmp/pr_map.json)
+          closed_count=$(jq 'length' /tmp/closed_issues.json)
+          format_hierarchical /tmp/closed_issues.json "true" > /tmp/closed_issues.txt
 
           # Find reopened issues (status changed from closed to open/in_progress)
-          reopened_issues=$(jq -s '
+          jq -s '
             .[0] as $base | .[1] as $pr |
             $pr | to_entries | map(
               select(
                 .value.status != "closed" and
                 .key as $k | $base[$k] != null and $base[$k].status == "closed"
               )
-            ) |
-            map("- **\(.key)**: \(.value.title)") | join("\n")
-          ' /tmp/base_map.json /tmp/pr_map.json)
+            )
+          ' /tmp/base_map.json /tmp/pr_map.json > /tmp/reopened_issues.json
 
-          reopened_count=$(jq -s '
-            .[0] as $base | .[1] as $pr |
-            $pr | to_entries | map(
-              select(
-                .value.status != "closed" and
-                .key as $k | $base[$k] != null and $base[$k].status == "closed"
-              )
-            ) | length
-          ' /tmp/base_map.json /tmp/pr_map.json)
+          reopened_count=$(jq 'length' /tmp/reopened_issues.json)
+          format_hierarchical /tmp/reopened_issues.json "false" > /tmp/reopened_issues.txt
 
           # Build report
           {
             echo "## New Issues Created"
             echo ""
             if [ "$new_count" -gt 0 ]; then
-              echo "$new_issues"
+              cat /tmp/new_issues.txt
             else
               echo "_No new issues created_"
             fi
@@ -123,7 +144,7 @@ jobs:
             echo "## Issues Closed"
             echo ""
             if [ "$closed_count" -gt 0 ]; then
-              echo "$closed_issues"
+              cat /tmp/closed_issues.txt
             else
               echo "_No issues closed_"
             fi
@@ -131,7 +152,7 @@ jobs:
             echo "## Issues Reopened"
             echo ""
             if [ "$reopened_count" -gt 0 ]; then
-              echo "$reopened_issues"
+              cat /tmp/reopened_issues.txt
             else
               echo "_No issues reopened_"
             fi
@@ -159,6 +180,7 @@ jobs:
         with:
           script: |
             const report = `${{ steps.analyze.outputs.report }}`;
+            const firstTime = '${{ steps.analyze.outputs.first_time }}' === 'true';
 
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
@@ -171,7 +193,11 @@ jobs:
               comment.body.includes('## New Issues Created')
             );
 
-            const body = `# 📋 Issue Tracker Report\n\n${report}`;
+            let body = `# 📋 Issue Tracker Report\n\n`;
+            if (firstTime) {
+              body += `> **Note:** This is the first PR adding beads issue tracking. All issues appear as "new".\n\n`;
+            }
+            body += report;
 
             if (botComment) {
               await github.rest.issues.updateComment({

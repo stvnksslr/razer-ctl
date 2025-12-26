@@ -13,7 +13,6 @@ builds:
       - --release
     targets:
       - x86_64-unknown-linux-gnu
-      - aarch64-unknown-linux-gnu
       - x86_64-pc-windows-gnu
     id: "blade-helper"
     binary: blade-helper
