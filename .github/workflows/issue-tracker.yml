@@ -46,9 +46,9 @@ jobs:
             echo '{}' > /tmp/base_map.json
           fi
 
-          # PR branch: id -> {status, title, close_reason}
+          # PR branch: id -> {status, title, close_reason, issue_type}
           if [ -s /tmp/pr_issues.jsonl ]; then
-            jq -s 'map({(.id): {status: .status, title: .title, close_reason: .close_reason}}) | add // {}' /tmp/pr_issues.jsonl > /tmp/pr_map.json
+            jq -s 'map({(.id): {status: .status, title: .title, close_reason: .close_reason, issue_type: .issue_type}}) | add // {}' /tmp/pr_issues.jsonl > /tmp/pr_map.json
           else
             echo '{}' > /tmp/pr_map.json
           fi
@@ -61,59 +61,37 @@ jobs:
             echo "first_time=false" >> $GITHUB_OUTPUT
           fi
 
-          # Helper function to format issues hierarchically using collapsible sections
-          format_hierarchical() {
+          # Helper function to format issues grouped by type
+          format_by_type() {
             local input_file=$1
             local include_reason=$2
 
             jq -r --arg include_reason "$include_reason" '
-              # Calculate depth based on dot count in ID
-              def depth: (split(".") | length) - 1;
+              # Define type order and labels
+              def type_order: {"epic": 0, "feature": 1, "bug": 2, "task": 3, "chore": 4};
+              def type_label: {"epic": "Epics", "feature": "Features", "bug": "Bugs", "task": "Tasks", "chore": "Chores"};
 
-              # Get the root/parent ID (everything before first dot, or whole ID if no dot)
-              def root_id: split(".")[0];
+              # Group by issue type, sort groups by type order
+              group_by(.value.issue_type // "task") |
+              sort_by(.[0].value.issue_type as $t | type_order[$t] // 99) |
 
-              # Group issues by their root ID
-              group_by(.key | root_id) |
-
-              # Process each group
+              # Format each group
               map(
-                # Sort within group by key
+                (.[0].value.issue_type // "task") as $type |
+                (type_label[$type] // ($type | ascii_upcase)) as $label |
+
+                # Sort issues within group by ID
                 sort_by(.key) |
 
-                # Check if this is an epic group (has children with dots)
-                if (.[0].key | contains(".") | not) and length > 1 then
-                  # Epic with children - use collapsible section
-                  .[0] as $epic |
-                  "<details>\n<summary><strong>\($epic.key)</strong> [\($epic.value.status)]: \($epic.value.title)</summary>\n\n" +
-                  (.[1:] | map(
-                    (.key | depth) as $d |
-                    (if $d == 1 then "- " else "  - " end) as $prefix |
-                    if $include_reason == "true" then
-                      "\($prefix)`\(.key)` [\(.value.status)]: \(.value.title)<br/>  _Reason: \(.value.close_reason // "No reason provided")_"
-                    else
-                      "\($prefix)`\(.key)` [\(.value.status)]: \(.value.title)"
-                    end
-                  ) | join("\n")) +
-                  "\n\n</details>"
-                elif .[0].key | contains(".") then
-                  # Orphan children (parent not in this list) - list normally
-                  map(
-                    if $include_reason == "true" then
-                      "- `\(.key)` [\(.value.status)]: \(.value.title)<br/>  _Reason: \(.value.close_reason // "No reason provided")_"
-                    else
-                      "- `\(.key)` [\(.value.status)]: \(.value.title)"
-                    end
-                  ) | join("\n")
-                else
-                  # Standalone issue (no children)
-                  .[0] |
+                # Create section header and items
+                "### \($label)\n" +
+                (map(
                   if $include_reason == "true" then
-                    "- **\(.key)** [\(.value.status)]: \(.value.title)<br/>  _Reason: \(.value.close_reason // "No reason provided")_"
+                    "- **\(.key)** [\(.value.status)]: \(.value.title)\n  - _Reason: \(.value.close_reason // "No reason provided")_"
                   else
                     "- **\(.key)** [\(.value.status)]: \(.value.title)"
                   end
-                end
+                ) | join("\n"))
               ) | join("\n\n")
             ' "$input_file"
           }
@@ -125,7 +103,7 @@ jobs:
           ' /tmp/base_map.json /tmp/pr_map.json > /tmp/new_issues.json
 
           new_count=$(jq 'length' /tmp/new_issues.json)
-          format_hierarchical /tmp/new_issues.json "false" > /tmp/new_issues.txt
+          format_by_type /tmp/new_issues.json "false" > /tmp/new_issues.txt
 
           # Find closed issues (status changed from open/in_progress to closed)
           jq -s '
@@ -139,7 +117,7 @@ jobs:
           ' /tmp/base_map.json /tmp/pr_map.json > /tmp/closed_issues.json
 
           closed_count=$(jq 'length' /tmp/closed_issues.json)
-          format_hierarchical /tmp/closed_issues.json "true" > /tmp/closed_issues.txt
+          format_by_type /tmp/closed_issues.json "true" > /tmp/closed_issues.txt
 
           # Find reopened issues (status changed from closed to open/in_progress)
           jq -s '
@@ -153,7 +131,7 @@ jobs:
           ' /tmp/base_map.json /tmp/pr_map.json > /tmp/reopened_issues.json
 
           reopened_count=$(jq 'length' /tmp/reopened_issues.json)
-          format_hierarchical /tmp/reopened_issues.json "false" > /tmp/reopened_issues.txt
+          format_by_type /tmp/reopened_issues.json "false" > /tmp/reopened_issues.txt
 
           # Build report
           {
@@ -199,7 +177,6 @@ jobs:
           } >> $GITHUB_OUTPUT
 
       - name: Comment on PR
-        if: steps.analyze.outputs.has_changes == 'true'
         uses: actions/github-script@v7
         with:
           script: |
@@ -213,29 +190,31 @@ jobs:
               issue_number: context.issue.number,
             });
 
+            // Find and delete any existing bot comment
             const botComment = comments.find(comment =>
               comment.user.type === 'Bot' &&
-              comment.body.includes('## New Issues Created')
+              comment.body.includes('# 📋 Issue Tracker Report')
             );
 
+            if (botComment) {
+              await github.rest.issues.deleteComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+              });
+            }
+
+            // Build fresh report
             let body = `# 📋 Issue Tracker Report\n\n`;
             if (firstTime) {
               body += `> **Note:** This is the first PR adding beads issue tracking. All issues appear as "new".\n\n`;
             }
             body += report;
 
-            if (botComment) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: botComment.id,
-                body: body
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body: body
-              });
-            }
+            // Always create new comment
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
