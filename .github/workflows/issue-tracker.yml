@@ -133,35 +133,73 @@ jobs:
           reopened_count=$(jq 'length' /tmp/reopened_issues.json)
           format_by_type /tmp/reopened_issues.json "false" > /tmp/reopened_issues.txt
 
-          # Build report
-          {
-            echo "## New Issues Created"
-            echo ""
-            if [ "$new_count" -gt 0 ]; then
-              cat /tmp/new_issues.txt
-            else
-              echo "_No new issues created_"
-            fi
-            echo ""
-            echo "## Issues Closed"
-            echo ""
-            if [ "$closed_count" -gt 0 ]; then
-              cat /tmp/closed_issues.txt
-            else
-              echo "_No issues closed_"
-            fi
-            echo ""
-            echo "## Issues Reopened"
-            echo ""
-            if [ "$reopened_count" -gt 0 ]; then
-              cat /tmp/reopened_issues.txt
-            else
-              echo "_No issues reopened_"
-            fi
-            echo ""
-            echo "---"
-            echo "**Summary:** ${new_count} created, ${closed_count} closed, ${reopened_count} reopened"
-          } > /tmp/report.md
+          # Build report - different format for first-time vs. incremental
+          if [ "$base_count" -eq 0 ]; then
+            # First time: show all issues grouped by status
+            jq -r '
+              def type_order: {"epic": 0, "feature": 1, "bug": 2, "task": 3, "chore": 4};
+              def type_label: {"epic": "Epics", "feature": "Features", "bug": "Bugs", "task": "Tasks", "chore": "Chores"};
+
+              to_entries |
+              group_by(.value.status) |
+              sort_by(if .[0].value.status == "open" then 0 elif .[0].value.status == "in_progress" then 1 else 2 end) |
+              map(
+                (.[0].value.status) as $status |
+                (if $status == "open" then "Open" elif $status == "in_progress" then "In Progress" else "Closed" end) as $label |
+
+                # Group by type within status
+                group_by(.value.issue_type // "task") |
+                sort_by(.[0].value.issue_type as $t | type_order[$t] // 99) |
+
+                "## \($label) Issues (\(. | flatten | length))\n\n" +
+                (map(
+                  (.[0].value.issue_type // "task") as $type |
+                  (type_label[$type] // ($type | ascii_upcase)) as $type_label |
+                  sort_by(.key) |
+                  "### \($type_label)\n" +
+                  (map("- **\(.key)**: \(.value.title)") | join("\n"))
+                ) | join("\n\n"))
+              ) | join("\n\n---\n\n")
+            ' /tmp/pr_map.json > /tmp/report.md
+
+            # Add summary
+            open_count=$(jq '[to_entries[] | select(.value.status == "open")] | length' /tmp/pr_map.json)
+            closed_count=$(jq '[to_entries[] | select(.value.status == "closed")] | length' /tmp/pr_map.json)
+            total_count=$(jq 'length' /tmp/pr_map.json)
+            echo "" >> /tmp/report.md
+            echo "---" >> /tmp/report.md
+            echo "**Total:** ${total_count} issues (${open_count} open, ${closed_count} closed)" >> /tmp/report.md
+          else
+            # Incremental: show changes between base and PR
+            {
+              echo "## New Issues Created"
+              echo ""
+              if [ "$new_count" -gt 0 ]; then
+                cat /tmp/new_issues.txt
+              else
+                echo "_No new issues created_"
+              fi
+              echo ""
+              echo "## Issues Closed"
+              echo ""
+              if [ "$closed_count" -gt 0 ]; then
+                cat /tmp/closed_issues.txt
+              else
+                echo "_No issues closed_"
+              fi
+              echo ""
+              echo "## Issues Reopened"
+              echo ""
+              if [ "$reopened_count" -gt 0 ]; then
+                cat /tmp/reopened_issues.txt
+              else
+                echo "_No issues reopened_"
+              fi
+              echo ""
+              echo "---"
+              echo "**Summary:** ${new_count} created, ${closed_count} closed, ${reopened_count} reopened"
+            } > /tmp/report.md
+          fi
 
           # Set outputs
           if [ "$new_count" -gt 0 ] || [ "$closed_count" -gt 0 ] || [ "$reopened_count" -gt 0 ]; then
