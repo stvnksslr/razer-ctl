@@ -7,8 +7,10 @@ on a 2023 blade 14.
 
 # Current Support
 
-- 2023 blades (14,15,16)
-- 2024 blades (14,16)
+- Razer Blade 14 (2023) Mercury - RZ09-0482X
+- Razer Blade 16 (2023) Black - RZ09-0483T
+
+Additional models can be added - see [Reverse Engineering](#reverse-engineering) section.
 
 # Current Features
 

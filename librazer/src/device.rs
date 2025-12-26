@@ -3,10 +3,15 @@ use crate::packet::Packet;
 
 use anyhow::{anyhow, Context, Result};
 use log::{debug, error};
-use std::{thread, time};
+use std::{fs, thread, time};
 
+/// Represents a connected Razer laptop device.
+///
+/// Wraps hidapi for USB HID communication. Use [`Device::detect`] for automatic
+/// detection or [`Device::new`] with a specific [`Descriptor`] for manual setup.
 pub struct Device {
     device: hidapi::HidDevice,
+    /// Device descriptor containing model info and supported features.
     pub info: Descriptor,
 }
 
@@ -43,10 +48,14 @@ fn read_device_model() -> Result<String> {
 impl Device {
     const RAZER_VID: u16 = 0x1532;
 
+    /// Returns a reference to the device descriptor.
     pub fn info(&self) -> &Descriptor {
         &self.info
     }
 
+    /// Creates a new Device with the specified descriptor.
+    ///
+    /// Opens the USB HID device matching the descriptor's PID.
     pub fn new(descriptor: Descriptor) -> Result<Device> {
         let api = hidapi::HidApi::new().context("Failed to create hid api")?;
 
@@ -66,6 +75,9 @@ impl Device {
         anyhow::bail!("Failed to open device {:?}", descriptor)
     }
 
+    /// Sends a USB HID feature report and returns the response.
+    ///
+    /// Handles the low-level protocol including timing delays and response validation.
     pub fn send(&self, report: Packet) -> Result<Packet> {
         // extra byte for report id
         let mut response_buf: Vec<u8> = vec![0x00; 1 + std::mem::size_of::<Packet>()];
@@ -92,6 +104,9 @@ impl Device {
         response.ensure_matches_report(&report)
     }
 
+    /// Enumerates connected Razer devices and detects the laptop model.
+    ///
+    /// Returns a list of PIDs found and the model number prefix (e.g., "RZ09-0483T").
     pub fn enumerate() -> Result<(Vec<u16>, String)> {
         let razer_pid_list: Vec<_> = hidapi::HidApi::new()?
             .device_list()
@@ -125,6 +140,10 @@ impl Device {
         }
     }
 
+    /// Auto-detects and connects to a supported Razer laptop.
+    ///
+    /// Combines [`enumerate`](Self::enumerate) with the [`SUPPORTED`] device list
+    /// to find and open a compatible device.
     pub fn detect() -> Result<Device> {
         let (pid_list, model_number_prefix) = Device::enumerate()?;
         debug!("Looking for support for model: {}", model_number_prefix);

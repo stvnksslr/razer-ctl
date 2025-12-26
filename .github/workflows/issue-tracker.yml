@@ -1,0 +1,260 @@
+name: Issue Tracker
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  track-issues:
+    name: Track Issue Changes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install beads CLI
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Export base branch issues
+        run: |
+          # Checkout base branch issues.jsonl to temp location
+          git show origin/${{ github.base_ref }}:.beads/issues.jsonl > /tmp/base_issues.jsonl 2>/dev/null || echo "" > /tmp/base_issues.jsonl
+
+      - name: Export PR branch issues
+        run: |
+          # Use bd to export current issues
+          bd export --no-db -o /tmp/pr_issues.jsonl 2>/dev/null || cp .beads/issues.jsonl /tmp/pr_issues.jsonl 2>/dev/null || echo "" > /tmp/pr_issues.jsonl
+
+      - name: Analyze issue changes
+        id: analyze
+        run: |
+          # Create indexed maps of issues from both branches using jq
+          # Base branch: id -> {status, title}
+          if [ -s /tmp/base_issues.jsonl ]; then
+            jq -s 'map({(.id): {status: .status, title: .title}}) | add // {}' /tmp/base_issues.jsonl > /tmp/base_map.json
+          else
+            echo '{}' > /tmp/base_map.json
+          fi
+
+          # PR branch: id -> {status, title, close_reason, issue_type}
+          if [ -s /tmp/pr_issues.jsonl ]; then
+            jq -s 'map({(.id): {status: .status, title: .title, close_reason: .close_reason, issue_type: .issue_type}}) | add // {}' /tmp/pr_issues.jsonl > /tmp/pr_map.json
+          else
+            echo '{}' > /tmp/pr_map.json
+          fi
+
+          # Check if this is the first time beads is being added
+          base_count=$(jq 'length' /tmp/base_map.json)
+          if [ "$base_count" -eq 0 ]; then
+            echo "first_time=true" >> $GITHUB_OUTPUT
+          else
+            echo "first_time=false" >> $GITHUB_OUTPUT
+          fi
+
+          # Helper function to format issues grouped by type
+          format_by_type() {
+            local input_file=$1
+            local include_reason=$2
+
+            jq -r --arg include_reason "$include_reason" '
+              # Define type order and labels
+              def type_order: {"epic": 0, "feature": 1, "bug": 2, "task": 3, "chore": 4};
+              def type_label: {"epic": "Epics", "feature": "Features", "bug": "Bugs", "task": "Tasks", "chore": "Chores"};
+
+              # Group by issue type, sort groups by type order
+              group_by(.value.issue_type // "task") |
+              sort_by(.[0].value.issue_type as $t | type_order[$t] // 99) |
+
+              # Format each group
+              map(
+                (.[0].value.issue_type // "task") as $type |
+                (type_label[$type] // ($type | ascii_upcase)) as $label |
+
+                # Sort issues within group by ID
+                sort_by(.key) |
+
+                # Create section header and items
+                "### \($label)\n" +
+                (map(
+                  if $include_reason == "true" then
+                    "- **\(.key)** [\(.value.status)]: \(.value.title)\n  - _Reason: \(.value.close_reason // "No reason provided")_"
+                  else
+                    "- **\(.key)** [\(.value.status)]: \(.value.title)"
+                  end
+                ) | join("\n"))
+              ) | join("\n\n")
+            ' "$input_file"
+          }
+
+          # Find new issues (in PR but not in base)
+          jq -s '
+            .[0] as $base | .[1] as $pr |
+            $pr | to_entries | map(select(.key as $k | $base[$k] == null))
+          ' /tmp/base_map.json /tmp/pr_map.json > /tmp/new_issues.json
+
+          new_count=$(jq 'length' /tmp/new_issues.json)
+          format_by_type /tmp/new_issues.json "false" > /tmp/new_issues.txt
+
+          # Find closed issues (status changed from open/in_progress to closed)
+          jq -s '
+            .[0] as $base | .[1] as $pr |
+            $pr | to_entries | map(
+              select(
+                .value.status == "closed" and
+                .key as $k | $base[$k] != null and $base[$k].status != "closed"
+              )
+            )
+          ' /tmp/base_map.json /tmp/pr_map.json > /tmp/closed_issues.json
+
+          closed_count=$(jq 'length' /tmp/closed_issues.json)
+          format_by_type /tmp/closed_issues.json "true" > /tmp/closed_issues.txt
+
+          # Find reopened issues (status changed from closed to open/in_progress)
+          jq -s '
+            .[0] as $base | .[1] as $pr |
+            $pr | to_entries | map(
+              select(
+                .value.status != "closed" and
+                .key as $k | $base[$k] != null and $base[$k].status == "closed"
+              )
+            )
+          ' /tmp/base_map.json /tmp/pr_map.json > /tmp/reopened_issues.json
+
+          reopened_count=$(jq 'length' /tmp/reopened_issues.json)
+          format_by_type /tmp/reopened_issues.json "false" > /tmp/reopened_issues.txt
+
+          # Build report - different format for first-time vs. incremental
+          if [ "$base_count" -eq 0 ]; then
+            # First time: show all issues grouped by status
+            jq -r '
+              def type_order: {"epic": 0, "feature": 1, "bug": 2, "task": 3, "chore": 4};
+              def type_label: {"epic": "Epics", "feature": "Features", "bug": "Bugs", "task": "Tasks", "chore": "Chores"};
+
+              to_entries |
+              group_by(.value.status) |
+              sort_by(if .[0].value.status == "open" then 0 elif .[0].value.status == "in_progress" then 1 else 2 end) |
+              map(
+                (.[0].value.status) as $status |
+                (if $status == "open" then "Open" elif $status == "in_progress" then "In Progress" else "Closed" end) as $label |
+
+                # Group by type within status
+                group_by(.value.issue_type // "task") |
+                sort_by(.[0].value.issue_type as $t | type_order[$t] // 99) |
+
+                "## \($label) Issues (\(. | flatten | length))\n\n" +
+                (map(
+                  (.[0].value.issue_type // "task") as $type |
+                  (type_label[$type] // ($type | ascii_upcase)) as $type_label |
+                  sort_by(.key) |
+                  "### \($type_label)\n" +
+                  (map("- **\(.key)**: \(.value.title)") | join("\n"))
+                ) | join("\n\n"))
+              ) | join("\n\n---\n\n")
+            ' /tmp/pr_map.json > /tmp/report.md
+
+            # Add summary
+            open_count=$(jq '[to_entries[] | select(.value.status == "open")] | length' /tmp/pr_map.json)
+            closed_count=$(jq '[to_entries[] | select(.value.status == "closed")] | length' /tmp/pr_map.json)
+            total_count=$(jq 'length' /tmp/pr_map.json)
+            echo "" >> /tmp/report.md
+            echo "---" >> /tmp/report.md
+            echo "**Total:** ${total_count} issues (${open_count} open, ${closed_count} closed)" >> /tmp/report.md
+          else
+            # Incremental: show changes between base and PR
+            {
+              echo "## New Issues Created"
+              echo ""
+              if [ "$new_count" -gt 0 ]; then
+                cat /tmp/new_issues.txt
+              else
+                echo "_No new issues created_"
+              fi
+              echo ""
+              echo "## Issues Closed"
+              echo ""
+              if [ "$closed_count" -gt 0 ]; then
+                cat /tmp/closed_issues.txt
+              else
+                echo "_No issues closed_"
+              fi
+              echo ""
+              echo "## Issues Reopened"
+              echo ""
+              if [ "$reopened_count" -gt 0 ]; then
+                cat /tmp/reopened_issues.txt
+              else
+                echo "_No issues reopened_"
+              fi
+              echo ""
+              echo "---"
+              echo "**Summary:** ${new_count} created, ${closed_count} closed, ${reopened_count} reopened"
+            } > /tmp/report.md
+          fi
+
+          # Set outputs
+          if [ "$new_count" -gt 0 ] || [ "$closed_count" -gt 0 ] || [ "$reopened_count" -gt 0 ]; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
+
+          {
+            echo 'report<<EOF'
+            cat /tmp/report.md
+            echo 'EOF'
+          } >> $GITHUB_OUTPUT
+
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('/tmp/report.md', 'utf8');
+            const firstTime = '${{ steps.analyze.outputs.first_time }}' === 'true';
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            // Find existing bot comment
+            const botComment = comments.find(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes('# 📋 Issue Tracker Report')
+            );
+
+            // Build report body
+            let body = `# 📋 Issue Tracker Report\n\n`;
+            if (firstTime) {
+              body += `> **Note:** This is the first PR adding beads issue tracking. All issues appear as "new".\n\n`;
+            }
+            body += report;
+
+            if (botComment) {
+              // Update existing comment in place (no new notification)
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+            } else {
+              // Create new comment only if none exists
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }
