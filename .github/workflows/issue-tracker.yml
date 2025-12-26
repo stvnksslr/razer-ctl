@@ -67,17 +67,9 @@ jobs:
             local input_file=$1
             local include_reason=$2
 
-            jq -rs '
+            jq -r '
               # Calculate depth based on dot count in ID
               def depth: (split(".") | length) - 1;
-
-              # Get parent ID (remove last .N segment)
-              def parent_id:
-                if contains(".") then
-                  split(".") | .[:-1] | join(".")
-                else
-                  null
-                end;
 
               # Sort by ID to ensure parents come before children
               sort_by(.key) |
