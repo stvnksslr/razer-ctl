@@ -1,6 +1,6 @@
 [workspace]
 changelog_update = true
-semver_check = false
+semver_check = true
 release_always = false
 
 # librazer - core library (publish to crates.io)
