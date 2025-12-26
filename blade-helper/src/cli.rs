@@ -8,7 +8,7 @@ use librazer::types::{
 #[command(
     author,
     version,
-    about = "User-friendly CLI for controlling Razer laptop settings"
+    about = "friendly CLI for controlling Razer laptop settings"
 )]
 #[command(propagate_version = true)]
 pub struct Cli {
