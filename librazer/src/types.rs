@@ -50,7 +50,9 @@ pub enum GpuBoost {
     High = 2,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, EnumIter, EnumString, ValueEnum)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Serialize, Deserialize, EnumIter, EnumString, ValueEnum,
+)]
 pub enum LogoMode {
     Off,
     Breathing,
