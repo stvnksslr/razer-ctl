@@ -67,7 +67,7 @@ jobs:
             local input_file=$1
             local include_reason=$2
 
-            jq -r '
+            jq -r --arg include_reason "$include_reason" '
               # Calculate depth based on dot count in ID
               def depth: (split(".") | length) - 1;
 
@@ -77,11 +77,11 @@ jobs:
               # Format each issue with proper indentation
               .[] |
               (.key | depth) as $d |
-              (if $d == 0 then "- " elif $d == 1 then "  - " else "    - " end) as $indent |
-              if '"$include_reason"' == "true" then
-                "\($indent)**\(.key)** [\(.value.status)]: \(.value.title)\n\($indent)  _Reason: \(.value.close_reason // "No reason provided")_"
+              (if $d == 0 then "" elif $d == 1 then "  " else "    " end) as $indent |
+              if $include_reason == "true" then
+                "\($indent)- **\(.key)** [\(.value.status)]: \(.value.title)\n\($indent)  - _Reason: \(.value.close_reason // "No reason provided")_"
               else
-                "\($indent)**\(.key)** [\(.value.status)]: \(.value.title)"
+                "\($indent)- **\(.key)** [\(.value.status)]: \(.value.title)"
               end
             ' "$input_file"
           }
