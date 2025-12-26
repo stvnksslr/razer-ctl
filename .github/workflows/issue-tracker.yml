@@ -61,8 +61,7 @@ jobs:
             echo "first_time=false" >> $GITHUB_OUTPUT
           fi
 
-          # Helper function to format issues hierarchically
-          # Issue ID format: prefix-XXX (root), prefix-XXX.N (child), prefix-XXX.N.N (grandchild)
+          # Helper function to format issues hierarchically using collapsible sections
           format_hierarchical() {
             local input_file=$1
             local include_reason=$2
@@ -71,18 +70,51 @@ jobs:
               # Calculate depth based on dot count in ID
               def depth: (split(".") | length) - 1;
 
-              # Sort by ID to ensure parents come before children
-              sort_by(.key) |
+              # Get the root/parent ID (everything before first dot, or whole ID if no dot)
+              def root_id: split(".")[0];
 
-              # Format each issue with proper indentation
-              .[] |
-              (.key | depth) as $d |
-              (if $d == 0 then "" elif $d == 1 then "  " else "    " end) as $indent |
-              if $include_reason == "true" then
-                "\($indent)- **\(.key)** [\(.value.status)]: \(.value.title)\n\($indent)  - _Reason: \(.value.close_reason // "No reason provided")_"
-              else
-                "\($indent)- **\(.key)** [\(.value.status)]: \(.value.title)"
-              end
+              # Group issues by their root ID
+              group_by(.key | root_id) |
+
+              # Process each group
+              map(
+                # Sort within group by key
+                sort_by(.key) |
+
+                # Check if this is an epic group (has children with dots)
+                if (.[0].key | contains(".") | not) and length > 1 then
+                  # Epic with children - use collapsible section
+                  .[0] as $epic |
+                  "<details>\n<summary><strong>\($epic.key)</strong> [\($epic.value.status)]: \($epic.value.title)</summary>\n\n" +
+                  (.[1:] | map(
+                    (.key | depth) as $d |
+                    (if $d == 1 then "- " else "  - " end) as $prefix |
+                    if $include_reason == "true" then
+                      "\($prefix)`\(.key)` [\(.value.status)]: \(.value.title)<br/>  _Reason: \(.value.close_reason // "No reason provided")_"
+                    else
+                      "\($prefix)`\(.key)` [\(.value.status)]: \(.value.title)"
+                    end
+                  ) | join("\n")) +
+                  "\n\n</details>"
+                elif .[0].key | contains(".") then
+                  # Orphan children (parent not in this list) - list normally
+                  map(
+                    if $include_reason == "true" then
+                      "- `\(.key)` [\(.value.status)]: \(.value.title)<br/>  _Reason: \(.value.close_reason // "No reason provided")_"
+                    else
+                      "- `\(.key)` [\(.value.status)]: \(.value.title)"
+                    end
+                  ) | join("\n")
+                else
+                  # Standalone issue (no children)
+                  .[0] |
+                  if $include_reason == "true" then
+                    "- **\(.key)** [\(.value.status)]: \(.value.title)<br/>  _Reason: \(.value.close_reason // "No reason provided")_"
+                  else
+                    "- **\(.key)** [\(.value.status)]: \(.value.title)"
+                  end
+                end
+              ) | join("\n\n")
             ' "$input_file"
           }
 
