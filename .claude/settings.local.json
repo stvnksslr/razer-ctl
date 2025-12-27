@@ -25,7 +25,8 @@
       "Bash(git show:*)",
       "WebSearch",
       "Bash(gh pr view:*)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:goreleaser.com)"
     ]
   },
   "enabledPlugins": {

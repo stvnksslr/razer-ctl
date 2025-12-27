@@ -2,10 +2,6 @@ version: 2
 
 project_name: blade-helper
 
-# Handle blade-helper-vX.Y.Z tag format from release-plz
-monorepo:
-  tag_prefix: blade-helper-
-
 before:
   hooks:
     - rustup default stable

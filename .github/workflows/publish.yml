@@ -37,6 +37,10 @@ jobs:
         with:
           go-version: stable
 
+      - name: Extract version from tag
+        id: version
+        run: echo "tag=${GITHUB_REF_NAME#blade-helper-}" >> $GITHUB_OUTPUT
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
@@ -45,3 +49,5 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Use version without 'blade-helper-' prefix
+          GORELEASER_CURRENT_TAG: ${{ steps.version.outputs.tag }}
