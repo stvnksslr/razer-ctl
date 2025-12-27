@@ -4,13 +4,61 @@ use crate::settings::{DeviceState, Setting, SettingValue};
 use librazer::{command, descriptor, device, types};
 use log::debug;
 
+/// Check if a Razer USB device is physically connected (Linux only).
+/// This checks /sys directly, bypassing hidapi permissions.
+#[cfg(target_os = "linux")]
+fn razer_device_exists() -> bool {
+    use std::fs;
+    use std::path::Path;
+
+    let usb_devices = Path::new("/sys/bus/usb/devices");
+    if let Ok(entries) = fs::read_dir(usb_devices) {
+        for entry in entries.flatten() {
+            let vendor_path = entry.path().join("idVendor");
+            if let Ok(vendor) = fs::read_to_string(&vendor_path) {
+                if vendor.trim().eq_ignore_ascii_case("1532") {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+#[cfg(not(target_os = "linux"))]
+fn razer_device_exists() -> bool {
+    false
+}
+
 pub struct BladeDevice {
     inner: device::Device,
 }
 
 impl BladeDevice {
     pub fn detect() -> Result<Self> {
-        let inner = device::Device::detect().map_err(|_| Error::DeviceNotFound)?;
+        let inner = device::Device::detect().map_err(|e| {
+            let err_msg = e.to_string().to_lowercase();
+
+            // Skip permission check if the error is about invalid arguments (protocol issue)
+            if err_msg.contains("einval") || err_msg.contains("invalid argument") {
+                return Error::DeviceNotFound;
+            }
+
+            // Check for permission-related errors
+            if err_msg.contains("permission")
+                || err_msg.contains("access denied")
+                || err_msg.contains("operation not permitted")
+            {
+                return Error::PermissionDenied;
+            }
+
+            // On Linux, if device exists in /sys but hidapi can't see it, likely permissions
+            if razer_device_exists() {
+                return Error::PermissionDenied;
+            }
+
+            Error::DeviceNotFound
+        })?;
         Ok(Self { inner })
     }
 

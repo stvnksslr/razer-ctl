@@ -10,6 +10,8 @@ permissions:
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
+    # Only run for blade-helper releases (tags like blade-helper-v0.1.0)
+    if: startsWith(github.event.release.tag_name, 'blade-helper-v')
     steps:
       - name: Checkout
         uses: actions/checkout@v4

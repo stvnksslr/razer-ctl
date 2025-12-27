@@ -28,6 +28,18 @@ Additional models can be added - see [Adding Device Support](#adding-device-supp
 cargo install --path blade-helper
 ```
 
+### Linux: USB Permissions
+
+On Linux, you need udev rules to access USB devices without root:
+
+```bash
+sudo cp 99-razer.rules /etc/udev/rules.d/
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+```
+
+Then unplug and replug your laptop (or reboot) for the rules to take effect.
+
 ## Usage
 
 ```

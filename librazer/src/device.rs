@@ -60,19 +60,41 @@ impl Device {
         let api = hidapi::HidApi::new().context("Failed to create hid api")?;
 
         // there are multiple devices with the same pid, pick first that support feature report
+        let mut last_error: Option<String> = None;
         for info in api.device_list().filter(|info| {
             (info.vendor_id(), info.product_id()) == (Device::RAZER_VID, descriptor.pid)
         }) {
             let path = info.path();
-            let device = api.open_path(path)?;
-            if device.send_feature_report(&[0, 0]).is_ok() {
-                return Ok(Device {
-                    device,
-                    info: descriptor.clone(),
-                });
+            debug!("Trying to open device at path: {:?}", path);
+            match api.open_path(path) {
+                Ok(device) => {
+                    debug!("Opened device, testing feature report...");
+                    // Report ID (1 byte) + Packet (90 bytes) = 91 bytes total
+                    match device.send_feature_report(&[0u8; 91]) {
+                        Ok(_) => {
+                            debug!("Feature report succeeded");
+                            return Ok(Device {
+                                device,
+                                info: descriptor.clone(),
+                            });
+                        }
+                        Err(e) => {
+                            debug!("Feature report failed: {}", e);
+                            last_error = Some(e.to_string());
+                        }
+                    }
+                }
+                Err(e) => {
+                    debug!("Failed to open path: {}", e);
+                    last_error = Some(e.to_string());
+                }
             }
         }
-        anyhow::bail!("Failed to open device {:?}", descriptor)
+        anyhow::bail!(
+            "Failed to open device {:?}: {}",
+            descriptor,
+            last_error.unwrap_or_else(|| "no matching device found".to_string())
+        )
     }
 
     /// Sends a USB HID feature report and returns the response.

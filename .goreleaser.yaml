@@ -1,5 +1,11 @@
 version: 2
 
+project_name: blade-helper
+
+# Handle blade-helper-vX.Y.Z tag format from release-plz
+monorepo:
+  tag_prefix: blade-helper-
+
 before:
   hooks:
     - rustup default stable
@@ -33,5 +39,7 @@ changelog:
   disable: true
 
 release:
+  # Use the existing release created by release-plz
+  mode: keep-existing
   footer: >-
     Released by [GoReleaser](https://goreleaser.com)
