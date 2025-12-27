@@ -16,7 +16,6 @@ builds:
   - id: "bhelper"
     binary: bhelper
     builder: rust
-    # tool: cross
     flags:
       - --release
       - --package=bhelper

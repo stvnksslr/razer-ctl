@@ -33,7 +33,15 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: stable
-      
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          # Strip 'bhelper-' prefix from tag (e.g., bhelper-v0.8.0 -> v0.8.0)
+          VERSION="${{ github.event.release.tag_name }}"
+          VERSION="${VERSION#bhelper-}"
+          echo "semver=$VERSION" >> $GITHUB_OUTPUT
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
@@ -42,3 +50,4 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ steps.version.outputs.semver }}
