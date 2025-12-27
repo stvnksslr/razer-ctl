@@ -1,6 +1,6 @@
 [package]
 name = "librazer"
-version = "0.7.1"
+version.workspace = true
 edition = "2021"
 description = "Library for controlling Razer laptop BIOS settings via USB HID"
 license = "MIT"

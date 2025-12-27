@@ -1,6 +1,6 @@
 [package]
 name = "blade-helper"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 description = "User-friendly CLI for controlling Razer laptop BIOS settings"
 license = "MIT"
