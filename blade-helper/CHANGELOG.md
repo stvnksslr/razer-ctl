@@ -6,3 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.7.2](https://github.com/stvnksslr/razer-ctl/compare/blade-helper-v0.7.1...blade-helper-v0.7.2) - 2025-12-27
+
+### Added
+- feat(new cli): (by @stvnksslr)
+
+### Fixed
+- *(cicd)* removing aarch64 from build matrix which was a carry over from khelp (by @stvnksslr)
+- fix(permission issue + publish logic): (by @stvnksslr)
+
+### Other
+- chore(cicd) (by @stvnksslr)
+- chore(cicd) (by @stvnksslr)
+- release v0.7.1 (by @stvnksslr)
+- chore(cicd) (by @stvnksslr)
+- chore(cicd) (by @stvnksslr)
+- chore(cicd) (by @stvnksslr)
+
+### Contributors
+
+* @stvnksslr
