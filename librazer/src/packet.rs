@@ -32,9 +32,19 @@ pub struct Packet {
     reserved: u8,
 }
 
+/// Status codes for USB HID command packets (per openrazer protocol).
 enum CommandStatus {
+    /// Initial status for outgoing packets (not yet processed)
     New = 0x00,
+    /// Device is busy processing the command
+    Busy = 0x01,
+    /// Command completed successfully
     Successful = 0x02,
+    /// Command failed (generic failure)
+    Failure = 0x03,
+    /// Command timed out (no response from device)
+    Timeout = 0x04,
+    /// Command not supported by this device
     NotSupported = 0x05,
 }
 
@@ -103,16 +113,24 @@ impl Packet {
             "Response command does not match the report"
         );
 
-        ensure!(
-            self.status != CommandStatus::NotSupported as u8,
-            "Command not supported"
-        );
-
-        ensure!(
-            self.status == CommandStatus::Successful as u8,
-            "Command failed with unknown status: {:02X?}",
-            self.status
-        );
+        match self.status {
+            s if s == CommandStatus::Successful as u8 => {}
+            s if s == CommandStatus::NotSupported as u8 => {
+                anyhow::bail!("Command not supported by device")
+            }
+            s if s == CommandStatus::Busy as u8 => {
+                anyhow::bail!("Device busy, try again")
+            }
+            s if s == CommandStatus::Failure as u8 => {
+                anyhow::bail!("Command failed")
+            }
+            s if s == CommandStatus::Timeout as u8 => {
+                anyhow::bail!("Command timed out")
+            }
+            s => {
+                anyhow::bail!("Command failed with unknown status: 0x{:02X}", s)
+            }
+        }
 
         Ok(self)
     }
