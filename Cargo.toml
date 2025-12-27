@@ -3,7 +3,7 @@ resolver = "2"
 members = [ "librazer", "blade-helper"]
 
 [workspace.package]
-version = "0.7.2"
+version = "0.7.3"
 
 [profile.release]
 lto = true
