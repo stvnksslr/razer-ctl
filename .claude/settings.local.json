@@ -20,7 +20,10 @@
       "Bash(dmesg:*)",
       "Bash(journalctl:*)",
       "Bash(cargo fmt:*)",
-      "Bash(cargo clippy:*)"
+      "Bash(cargo clippy:*)",
+      "WebFetch(domain:release-plz.dev)",
+      "Bash(git show:*)",
+      "WebSearch"
     ]
   }
 }
