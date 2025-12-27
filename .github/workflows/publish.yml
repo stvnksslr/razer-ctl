@@ -5,10 +5,12 @@ on:
     types: [ published ]
 
 permissions:
-  contents: write 
-  
+  contents: write
+
 jobs:
   goreleaser:
+    # Only run for bhelper releases, not librazer releases
+    if: startsWith(github.event.release.tag_name, 'bhelper-')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
