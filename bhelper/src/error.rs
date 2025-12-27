@@ -15,7 +15,7 @@ pub enum Error {
     Config(#[from] confy::ConfyError),
 
     #[error("Device error: {0}")]
-    Device(#[from] anyhow::Error),
+    Device(#[from] librazer::error::RazerError),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

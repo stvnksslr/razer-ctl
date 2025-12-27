@@ -1,11 +1,22 @@
 use crate::descriptor::{Descriptor, SUPPORTED};
+use crate::error::{RazerError, Result};
 use crate::packet::Packet;
 
-use anyhow::{anyhow, Context, Result};
 use log::{debug, trace, warn};
 #[cfg(target_os = "linux")]
 use std::fs;
 use std::{thread, time};
+
+/// Result of enumerating connected Razer devices.
+///
+/// Contains the list of detected USB product IDs and the laptop model number prefix.
+#[derive(Debug, Clone)]
+pub struct EnumerationResult {
+    /// List of USB product IDs for detected Razer devices.
+    pub pids: Vec<u16>,
+    /// Model number prefix (e.g., "RZ09-0483T").
+    pub model: String,
+}
 
 /// Represents a connected Razer laptop device.
 ///
@@ -21,8 +32,12 @@ pub struct Device {
 #[cfg(target_os = "windows")]
 fn read_device_model() -> Result<String> {
     let hklm = winreg::RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE);
-    let bios = hklm.open_subkey("HARDWARE\\DESCRIPTION\\System\\BIOS")?;
-    let system_sku: String = bios.get_value("SystemSKU")?;
+    let bios = hklm
+        .open_subkey("HARDWARE\\DESCRIPTION\\System\\BIOS")
+        .map_err(|e| RazerError::ModelDetectionFailed(e.to_string()))?;
+    let system_sku: String = bios
+        .get_value("SystemSKU")
+        .map_err(|e| RazerError::ModelDetectionFailed(e.to_string()))?;
     Ok(system_sku.chars().take(10).collect())
 }
 
@@ -30,21 +45,23 @@ fn read_device_model() -> Result<String> {
 fn read_device_model() -> Result<String> {
     let sku = fs::read_to_string("/sys/devices/virtual/dmi/id/product_sku")
         .map(|s| s.trim().to_string())
-        .map_err(|e| anyhow::anyhow!("Failed to read product SKU: {}", e))?;
+        .map_err(|e| {
+            RazerError::ModelDetectionFailed(format!("Failed to read product SKU: {}", e))
+        })?;
 
     debug!("Linux product SKU: {}", sku);
 
     if sku.starts_with("RZ") {
         Ok(sku.chars().take(10).collect())
     } else {
-        anyhow::bail!("Invalid Razer laptop SKU: {}", sku)
+        Err(RazerError::InvalidModel(sku))
     }
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "linux")))]
 fn read_device_model() -> Result<String> {
     debug!("Unsupported platform detected");
-    anyhow::bail!("Automatic model detection is not implemented for this platform")
+    Err(RazerError::UnsupportedPlatform)
 }
 
 impl Device {
@@ -59,7 +76,7 @@ impl Device {
     ///
     /// Opens the USB HID device matching the descriptor's PID.
     pub fn new(descriptor: Descriptor) -> Result<Device> {
-        let api = hidapi::HidApi::new().context("Failed to create hid api")?;
+        let api = hidapi::HidApi::new()?;
 
         // there are multiple devices with the same pid, pick first that support feature report
         let mut last_error: Option<String> = None;
@@ -95,11 +112,10 @@ impl Device {
                 }
             }
         }
-        anyhow::bail!(
-            "Failed to open device {:?}: {}",
-            descriptor,
-            last_error.unwrap_or_else(|| "no matching device found".to_string())
-        )
+        Err(RazerError::DeviceOpenFailed {
+            name: descriptor.name.to_string(),
+            reason: last_error.unwrap_or_else(|| "no matching device found".to_string()),
+        })
     }
 
     /// Sends a USB HID feature report and returns the response.
@@ -112,22 +128,24 @@ impl Device {
         // Delay before sending to ensure device is ready for new command.
         // Per openrazer protocol, USB HID polling rate requires minimum inter-command spacing.
         thread::sleep(time::Duration::from_micros(1000));
-        self.device
-            .send_feature_report(
-                [0_u8; 1] // report id
-                    .iter()
-                    .copied()
-                    .chain(Into::<Vec<u8>>::into(&report).into_iter())
-                    .collect::<Vec<_>>()
-                    .as_slice(),
-            )
-            .context("Failed to send feature report")?;
+        self.device.send_feature_report(
+            [0_u8; 1] // report id
+                .iter()
+                .copied()
+                .chain(Into::<Vec<u8>>::into(&report).into_iter())
+                .collect::<Vec<_>>()
+                .as_slice(),
+        )?;
 
         // Delay before reading response to allow device to process command.
         // 2ms provides margin for device firmware to prepare response buffer.
         thread::sleep(time::Duration::from_micros(2000));
-        if response_buf.len() != self.device.get_feature_report(&mut response_buf)? {
-            return Err(anyhow!("Response size != {}", response_buf.len()));
+        let bytes_read = self.device.get_feature_report(&mut response_buf)?;
+        if response_buf.len() != bytes_read {
+            return Err(RazerError::InvalidDataSize {
+                expected: response_buf.len(),
+                actual: bytes_read,
+            });
         }
 
         // skip report id byte
@@ -137,9 +155,10 @@ impl Device {
 
     /// Enumerates connected Razer devices and detects the laptop model.
     ///
-    /// Returns a list of PIDs found and the model number prefix (e.g., "RZ09-0483T").
-    pub fn enumerate() -> Result<(Vec<u16>, String)> {
-        let razer_pid_list: Vec<_> = hidapi::HidApi::new()?
+    /// Returns an [`EnumerationResult`] containing the list of PIDs found and
+    /// the model number prefix (e.g., "RZ09-0483T").
+    pub fn enumerate() -> Result<EnumerationResult> {
+        let pids: Vec<_> = hidapi::HidApi::new()?
             .device_list()
             .filter(|info| info.vendor_id() == Device::RAZER_VID)
             .map(|info| info.product_id())
@@ -147,26 +166,26 @@ impl Device {
             .into_iter()
             .collect();
 
-        if razer_pid_list.is_empty() {
+        if pids.is_empty() {
             debug!("No Razer devices found in USB enumeration");
-            anyhow::bail!("No Razer devices found")
+            return Err(RazerError::NoDevicesFound);
         }
 
-        debug!("Found Razer devices with PIDs: {:?}", razer_pid_list);
+        debug!("Found Razer devices with PIDs: {:?}", pids);
 
         match read_device_model() {
             Ok(model) => {
                 debug!("Detected model: {}", model);
                 if model.starts_with("RZ09-") {
-                    Ok((razer_pid_list, model))
+                    Ok(EnumerationResult { pids, model })
                 } else {
                     warn!("Model {} is not a Razer laptop (expected RZ09-*)", model);
-                    anyhow::bail!("Detected model but it's not a Razer laptop: {}", model)
+                    Err(RazerError::InvalidModel(model))
                 }
             }
             Err(e) => {
                 warn!("Failed to detect model: {}", e);
-                anyhow::bail!("Failed to detect model: {}", e)
+                Err(e)
             }
         }
     }
@@ -176,12 +195,12 @@ impl Device {
     /// Combines [`enumerate`](Self::enumerate) with the [`SUPPORTED`] device list
     /// to find and open a compatible device.
     pub fn detect() -> Result<Device> {
-        let (pid_list, model_number_prefix) = Device::enumerate()?;
-        trace!("Looking for support for model: {}", model_number_prefix);
+        let enumeration = Device::enumerate()?;
+        trace!("Looking for support for model: {}", enumeration.model);
 
         match SUPPORTED
             .iter()
-            .find(|supported| model_number_prefix.starts_with(supported.model_number_prefix))
+            .find(|supported| enumeration.model.starts_with(supported.model_number_prefix))
         {
             Some(supported) => {
                 debug!("Found supported device: {}", supported.name);
@@ -190,13 +209,12 @@ impl Device {
             None => {
                 warn!(
                     "Model {} with PIDs {:0>4x?} is not supported",
-                    model_number_prefix, pid_list
+                    enumeration.model, enumeration.pids
                 );
-                anyhow::bail!(
-                    "Model {} with PIDs {:0>4x?} is not supported",
-                    model_number_prefix,
-                    pid_list
-                )
+                Err(RazerError::UnsupportedModel {
+                    model: enumeration.model,
+                    pids: enumeration.pids,
+                })
             }
         }
     }

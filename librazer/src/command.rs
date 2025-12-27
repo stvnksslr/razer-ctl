@@ -1,10 +1,10 @@
 use crate::device::Device;
+use crate::error::{RazerError, Result};
 use crate::packet::Packet;
 use crate::types::{
     BatteryCare, Cluster, CpuBoost, FanMode, FanZone, GpuBoost, LightsAlwaysOn, LogoMode,
     MaxFanSpeedMode, PerfMode, ThermalZone,
 };
-use anyhow::{bail, ensure, Result};
 use log::{debug, trace};
 
 // USB HID command codes - see data/README.md for protocol details
@@ -43,13 +43,19 @@ mod cmd {
 fn send_command(device: &Device, command: u16, args: &[u8]) -> Result<Packet> {
     trace!("Sending command 0x{:04X} with args {:02X?}", command, args);
     let response = device.send(Packet::new(command, args))?;
-    ensure!(response.get_args().starts_with(args));
+    if !response.get_args().starts_with(args) {
+        return Err(RazerError::ResponseMismatch);
+    }
     Ok(response)
 }
 
 fn set_perf_mode_internal(device: &Device, perf_mode: PerfMode, fan_mode: FanMode) -> Result<()> {
     if (fan_mode == FanMode::Manual) && (perf_mode != PerfMode::Balanced) {
-        bail!("{:?} allowed only in {:?}", fan_mode, PerfMode::Balanced);
+        return Err(RazerError::PreconditionFailed(format!(
+            "{:?} allowed only in {:?}",
+            fan_mode,
+            PerfMode::Balanced
+        )));
     }
 
     ThermalZone::ALL.into_iter().try_for_each(|zone| {
@@ -64,21 +70,24 @@ fn set_perf_mode_internal(device: &Device, perf_mode: PerfMode, fan_mode: FanMod
 
 fn set_boost_internal(device: &Device, cluster: Cluster, boost: u8) -> Result<()> {
     let args = &[0, cluster as u8, boost];
-    ensure!(
-        get_perf_mode(device)? == (PerfMode::Custom, FanMode::Auto),
-        "Performance mode must be {:?}",
-        PerfMode::Custom
-    );
-    ensure!(device
-        .send(Packet::new(cmd::SET_BOOST, args))?
-        .get_args()
-        .starts_with(args));
+    if get_perf_mode(device)? != (PerfMode::Custom, FanMode::Auto) {
+        return Err(RazerError::PreconditionFailed(format!(
+            "Performance mode must be {:?}",
+            PerfMode::Custom
+        )));
+    }
+    let response = device.send(Packet::new(cmd::SET_BOOST, args))?;
+    if !response.get_args().starts_with(args) {
+        return Err(RazerError::ResponseMismatch);
+    }
     Ok(())
 }
 
 fn get_boost_internal(device: &Device, cluster: Cluster) -> Result<u8> {
     let response = device.send(Packet::new(cmd::GET_BOOST, &[0, cluster as u8, 0]))?;
-    ensure!(response.get_args()[1] == cluster as u8);
+    if response.get_args()[1] != cluster as u8 {
+        return Err(RazerError::ResponseMismatch);
+    }
     Ok(response.get_args()[2])
 }
 
@@ -105,12 +114,12 @@ pub fn get_perf_mode(device: &Device) -> Result<(PerfMode, FanMode)> {
         })
         .collect::<Result<Vec<_>>>()?;
 
-    ensure!(
-        results[0] == results[1],
-        "Modes do not match between zones: {:?} vs {:?}",
-        results[0],
-        results[1]
-    );
+    if results[0] != results[1] {
+        return Err(RazerError::Other(format!(
+            "Modes do not match between zones: {:?} vs {:?}",
+            results[0], results[1]
+        )));
+    }
 
     Ok(results[0])
 }
@@ -141,17 +150,19 @@ pub fn get_gpu_boost(device: &Device) -> Result<GpuBoost> {
 ///
 /// Requires Balanced performance mode with Manual fan mode.
 pub fn set_fan_rpm(device: &Device, rpm: u16) -> Result<()> {
-    ensure!(
-        (2000..=5000).contains(&rpm),
-        "RPM must be between 2000 and 5000, got {}",
-        rpm
-    );
-    ensure!(
-        get_perf_mode(device)? == (PerfMode::Balanced, FanMode::Manual),
-        "Performance mode must be {:?} and fan mode must be {:?}",
-        PerfMode::Balanced,
-        FanMode::Manual
-    );
+    if !(2000..=5000).contains(&rpm) {
+        return Err(RazerError::PreconditionFailed(format!(
+            "RPM must be between 2000 and 5000, got {}",
+            rpm
+        )));
+    }
+    if get_perf_mode(device)? != (PerfMode::Balanced, FanMode::Manual) {
+        return Err(RazerError::PreconditionFailed(format!(
+            "Performance mode must be {:?} and fan mode must be {:?}",
+            PerfMode::Balanced,
+            FanMode::Manual
+        )));
+    }
     debug!("Setting fan RPM to {}", rpm);
     FanZone::ALL.into_iter().try_for_each(|zone| {
         send_command(
@@ -166,17 +177,20 @@ pub fn set_fan_rpm(device: &Device, rpm: u16) -> Result<()> {
 /// Gets the current fan RPM for the specified zone.
 pub fn get_fan_rpm(device: &Device, fan_zone: FanZone) -> Result<u16> {
     let response = device.send(Packet::new(cmd::GET_FAN_RPM, &[0, fan_zone as u8, 0]))?;
-    ensure!(response.get_args()[1] == fan_zone as u8);
+    if response.get_args()[1] != fan_zone as u8 {
+        return Err(RazerError::ResponseMismatch);
+    }
     Ok(response.get_args()[2] as u16 * 100)
 }
 
 /// Enables or disables max fan speed mode. Requires Custom performance mode.
 pub fn set_max_fan_speed_mode(device: &Device, mode: MaxFanSpeedMode) -> Result<()> {
-    ensure!(
-        get_perf_mode(device)?.0 == PerfMode::Custom,
-        "Performance mode must be {:?}",
-        PerfMode::Custom
-    );
+    if get_perf_mode(device)?.0 != PerfMode::Custom {
+        return Err(RazerError::PreconditionFailed(format!(
+            "Performance mode must be {:?}",
+            PerfMode::Custom
+        )));
+    }
     send_command(device, cmd::SET_MAX_FAN_SPEED, &[mode as u8]).map(|_| ())
 }
 
@@ -190,11 +204,12 @@ pub fn get_max_fan_speed_mode(device: &Device) -> Result<MaxFanSpeedMode> {
 
 /// Sets the fan mode to Auto or Manual. Requires Balanced performance mode.
 pub fn set_fan_mode(device: &Device, mode: FanMode) -> Result<()> {
-    ensure!(
-        get_perf_mode(device)?.0 == PerfMode::Balanced,
-        "Performance mode must be {:?}",
-        PerfMode::Balanced
-    );
+    if get_perf_mode(device)?.0 != PerfMode::Balanced {
+        return Err(RazerError::PreconditionFailed(format!(
+            "Performance mode must be {:?}",
+            PerfMode::Balanced
+        )));
+    }
     set_perf_mode_internal(device, PerfMode::Balanced, mode)
 }
 
@@ -223,7 +238,7 @@ fn set_logo_mode_internal(device: &Device, mode: LogoMode) -> Result<Packet> {
     match mode {
         LogoMode::Static => send_command(device, cmd::SET_LOGO_MODE, &[1, 4, 0]),
         LogoMode::Breathing => send_command(device, cmd::SET_LOGO_MODE, &[1, 4, 2]),
-        _ => bail!("Invalid logo mode"),
+        _ => Err(RazerError::Other("Invalid logo mode".to_string())),
     }
 }
 
@@ -234,7 +249,10 @@ fn get_logo_power(device: &Device) -> Result<bool> {
     {
         0 => Ok(false),
         1 => Ok(true),
-        _ => bail!("Invalid logo power state"),
+        v => Err(RazerError::InvalidValue {
+            value: v,
+            type_name: "LogoPower",
+        }),
     }
 }
 
@@ -245,7 +263,10 @@ fn get_logo_mode_internal(device: &Device) -> Result<LogoMode> {
     {
         0 => Ok(LogoMode::Static),
         2 => Ok(LogoMode::Breathing),
-        _ => bail!("Invalid logo power state"),
+        v => Err(RazerError::InvalidValue {
+            value: v,
+            type_name: "LogoMode",
+        }),
     }
 }
 
@@ -271,7 +292,9 @@ pub fn set_logo_mode(device: &Device, mode: LogoMode) -> Result<()> {
 /// Gets the current keyboard backlight brightness (0-255).
 pub fn get_keyboard_brightness(device: &Device) -> Result<u8> {
     let response = device.send(Packet::new(cmd::GET_KBD_BRIGHTNESS, &[1, 5, 0]))?;
-    ensure!(response.get_args()[1] == 5);
+    if response.get_args()[1] != 5 {
+        return Err(RazerError::ResponseMismatch);
+    }
     Ok(response.get_args()[2])
 }
 
@@ -279,10 +302,10 @@ pub fn get_keyboard_brightness(device: &Device) -> Result<u8> {
 pub fn set_keyboard_brightness(device: &Device, brightness: u8) -> Result<()> {
     debug!("Setting keyboard brightness to {}", brightness);
     let args = &[1, 5, brightness];
-    ensure!(device
-        .send(Packet::new(cmd::SET_KBD_BRIGHTNESS, args))?
-        .get_args()
-        .starts_with(args));
+    let response = device.send(Packet::new(cmd::SET_KBD_BRIGHTNESS, args))?;
+    if !response.get_args().starts_with(args) {
+        return Err(RazerError::ResponseMismatch);
+    }
     Ok(())
 }
 
@@ -297,10 +320,10 @@ pub fn get_lights_always_on(device: &Device) -> Result<LightsAlwaysOn> {
 /// Sets whether lights stay on when the laptop is closed/sleeping.
 pub fn set_lights_always_on(device: &Device, lights_always_on: LightsAlwaysOn) -> Result<()> {
     let args = &[lights_always_on as u8, 0];
-    ensure!(device
-        .send(Packet::new(cmd::SET_LIGHTS_ALWAYS_ON, args))?
-        .get_args()
-        .starts_with(args));
+    let response = device.send(Packet::new(cmd::SET_LIGHTS_ALWAYS_ON, args))?;
+    if !response.get_args().starts_with(args) {
+        return Err(RazerError::ResponseMismatch);
+    }
     Ok(())
 }
 
@@ -316,9 +339,9 @@ pub fn get_battery_care(device: &Device) -> Result<BatteryCare> {
 pub fn set_battery_care(device: &Device, mode: BatteryCare) -> Result<()> {
     debug!("Setting battery care to {:?}", mode);
     let args = &[mode as u8];
-    ensure!(device
-        .send(Packet::new(cmd::SET_BATTERY_CARE, args))?
-        .get_args()
-        .starts_with(args));
+    let response = device.send(Packet::new(cmd::SET_BATTERY_CARE, args))?;
+    if !response.get_args().starts_with(args) {
+        return Err(RazerError::ResponseMismatch);
+    }
     Ok(())
 }
