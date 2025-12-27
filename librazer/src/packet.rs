@@ -1,4 +1,4 @@
-use anyhow::{ensure, Result};
+use crate::error::{RazerError, Result};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
@@ -100,35 +100,36 @@ impl Packet {
     ///
     /// Checks command class, command ID, transaction ID, and status code.
     pub fn ensure_matches_report(self, report: &Packet) -> Result<Self> {
-        ensure!(
-            (report.command_class, report.command_id, report.id)
-                == (self.command_class, self.command_id, self.id),
-            "Response does not match the report"
-        );
+        if (report.command_class, report.command_id, report.id)
+            != (self.command_class, self.command_id, self.id)
+        {
+            return Err(RazerError::ResponseMismatch);
+        }
 
-        ensure!(
-            self.remaining_packets == report.remaining_packets
-            || (self.command_class, self.command_id) == (0x07, 0x92) /* 0x0792 (bho) has special handling */
-            || (self.command_class, self.command_id) == (0x07, 0x8f), /* 0x078f max fan speed mode has special handling */
-            "Response command does not match the report"
-        );
+        if self.remaining_packets != report.remaining_packets
+            && (self.command_class, self.command_id) != (0x07, 0x92) /* 0x0792 (bho) has special handling */
+            && (self.command_class, self.command_id) != (0x07, 0x8f)
+        /* 0x078f max fan speed mode has special handling */
+        {
+            return Err(RazerError::ResponseMismatch);
+        }
 
         match self.status {
             s if s == CommandStatus::Successful as u8 => {}
             s if s == CommandStatus::NotSupported as u8 => {
-                anyhow::bail!("Command not supported by device")
+                return Err(RazerError::CommandNotSupported);
             }
             s if s == CommandStatus::Busy as u8 => {
-                anyhow::bail!("Device busy, try again")
+                return Err(RazerError::DeviceBusy);
             }
             s if s == CommandStatus::Failure as u8 => {
-                anyhow::bail!("Command failed")
+                return Err(RazerError::CommandFailed);
             }
             s if s == CommandStatus::Timeout as u8 => {
-                anyhow::bail!("Command timed out")
+                return Err(RazerError::CommandTimeout);
             }
             s => {
-                anyhow::bail!("Command failed with unknown status: 0x{:02X}", s)
+                return Err(RazerError::UnknownStatus(s));
             }
         }
 
@@ -143,15 +144,18 @@ impl From<&Packet> for Vec<u8> {
 }
 
 impl TryFrom<&[u8]> for Packet {
-    type Error = anyhow::Error;
+    type Error = RazerError;
 
-    fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
-        ensure!(
-            data.len() == std::mem::size_of::<Packet>(),
-            "Invalid raw data size"
-        );
+    fn try_from(data: &[u8]) -> std::result::Result<Self, Self::Error> {
+        if data.len() != std::mem::size_of::<Packet>() {
+            return Err(RazerError::InvalidDataSize {
+                expected: std::mem::size_of::<Packet>(),
+                actual: data.len(),
+            });
+        }
 
-        Ok(bincode::deserialize::<Packet>(data)?)
+        bincode::deserialize::<Packet>(data)
+            .map_err(|e| RazerError::Other(format!("Deserialization failed: {}", e)))
     }
 }
 

@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use crate::error::RazerError;
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use strum_macros::{EnumIter, EnumString};
@@ -7,12 +7,15 @@ use strum_macros::{EnumIter, EnumString};
 macro_rules! impl_try_from_u8 {
     ($enum_type:ident { $($value:expr => $variant:ident),+ $(,)? }) => {
         impl TryFrom<u8> for $enum_type {
-            type Error = anyhow::Error;
+            type Error = RazerError;
 
             fn try_from(value: u8) -> Result<Self, Self::Error> {
                 match value {
                     $($value => Ok(Self::$variant),)+
-                    _ => bail!("Failed to convert {} to {}", value, stringify!($enum_type)),
+                    _ => Err(RazerError::InvalidValue {
+                        value,
+                        type_name: stringify!($enum_type),
+                    }),
                 }
             }
         }
@@ -61,7 +64,7 @@ pub enum MaxFanSpeedMode {
     Disable = 0,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, EnumIter, ValueEnum)]
 pub enum FanMode {
     Auto = 0,
     Manual = 1,
