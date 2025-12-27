@@ -46,8 +46,9 @@ jobs:
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean
+          # Skip validate because actual tag is blade-helper-vX.Y.Z but we use vX.Y.Z
+          args: release --clean --skip=validate
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Use version without 'blade-helper-' prefix
+          # Use version without 'blade-helper-' prefix for clean archive names
           GORELEASER_CURRENT_TAG: ${{ steps.version.outputs.tag }}
