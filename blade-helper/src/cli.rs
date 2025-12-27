@@ -5,11 +5,7 @@ use librazer::types::{
 
 #[derive(Parser)]
 #[command(name = "blade_helper")]
-#[command(
-    author,
-    version,
-    about = "friendly CLI for controlling Razer laptop settings"
-)]
+#[command(author, version, about = "CLI for controlling Razer laptop settings")]
 #[command(propagate_version = true)]
 pub struct Cli {
     /// Enable verbose output

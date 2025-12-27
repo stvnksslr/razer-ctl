@@ -23,7 +23,12 @@
       "Bash(cargo clippy:*)",
       "WebFetch(domain:release-plz.dev)",
       "Bash(git show:*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(gh pr view:*)",
+      "WebFetch(domain:github.com)"
     ]
+  },
+  "enabledPlugins": {
+    "github@claude-plugins-official": true
   }
 }
