@@ -1,47 +1,32 @@
-use const_format::{map_ascii_case, Case};
+//! Feature constants for device capability validation.
+//!
+//! Features are validated at compile time to ensure only valid
+//! feature strings are used in device descriptors.
 
-pub trait Feature {
-    fn name(&self) -> &'static str;
-}
+/// Feature name for battery care mode (80% charge limit)
+pub const BATTERYCARE: &str = "battery-care";
+/// Feature name for lid logo control
+pub const LIDLOGO: &str = "lid-logo";
+/// Feature name for lights-always-on setting
+pub const LIGHTSALWAYSON: &str = "lights-always-on";
+/// Feature name for keyboard backlight control
+pub const KBDBACKLIGHT: &str = "kbd-backlight";
+/// Feature name for fan control
+pub const FAN: &str = "fan";
+/// Feature name for performance mode control
+pub const PERF: &str = "perf";
 
-macro_rules! feature_list {
-    ($($type:ident,)*) => {
-        $(
-            #[derive(Default)]
-            pub struct $type {}
+/// All valid feature names for compile-time validation
+pub const ALL_FEATURES: &[&str] = &[
+    BATTERYCARE,
+    LIDLOGO,
+    LIGHTSALWAYSON,
+    KBDBACKLIGHT,
+    FAN,
+    PERF,
+];
 
-            impl Feature for $type {
-                fn name(&self) -> &'static str {
-                    map_ascii_case!(Case::Kebab, stringify!($type))
-                }
-            }
-
-            paste::paste! {
-                #[doc = "Feature name constant for " $type]
-                pub const [<$type:upper>]: &str = map_ascii_case!(Case::Kebab, stringify!($type));
-            }
-        )*
-
-        pub const ALL_FEATURES: &[&'static str] = &[
-            $(map_ascii_case!(Case::Kebab, stringify!($type)),)*
-        ];
-
-        #[macro_export]
-        macro_rules! iter_features {
-            ($apply:expr) => {
-                {
-                    let mut v = Vec::new();
-                    $(
-                        let entry = $type::default();
-                        v.push($apply(entry.name(), entry));
-                    )*
-                    v
-                }
-            }
-        }
-    }
-}
-
+/// Helper macro for const iteration over slices
 #[macro_export]
 macro_rules! const_for {
     ($var:ident in $iter:expr => $block:block) => {
@@ -62,37 +47,20 @@ const fn contains(array: &[&str], value: &str) -> bool {
     false
 }
 
+/// Validates that all feature strings are in the supported list.
+/// Called at compile time from descriptor.rs.
 pub const fn validate_features(features: &[&str]) {
     const_for! { f in features => {
         assert!(contains(ALL_FEATURES, f), "Feature is not in supported list");
     }}
 }
 
-feature_list![
-    BatteryCare,
-    LidLogo,
-    LightsAlwaysOn,
-    KbdBacklight,
-    Fan,
-    Perf,
-];
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_feature_names_are_kebab_case() {
-        assert_eq!(BatteryCare::default().name(), "battery-care");
-        assert_eq!(LidLogo::default().name(), "lid-logo");
-        assert_eq!(LightsAlwaysOn::default().name(), "lights-always-on");
-        assert_eq!(KbdBacklight::default().name(), "kbd-backlight");
-        assert_eq!(Fan::default().name(), "fan");
-        assert_eq!(Perf::default().name(), "perf");
-    }
-
-    #[test]
-    fn test_feature_constants_match_names() {
+    fn test_feature_constants() {
         assert_eq!(BATTERYCARE, "battery-care");
         assert_eq!(LIDLOGO, "lid-logo");
         assert_eq!(LIGHTSALWAYSON, "lights-always-on");

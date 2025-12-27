@@ -2,10 +2,10 @@ use crate::device::Device;
 use crate::packet::Packet;
 use crate::types::{
     BatteryCare, Cluster, CpuBoost, FanMode, FanZone, GpuBoost, LightsAlwaysOn, LogoMode,
-    MaxFanSpeedMode, PerfMode,
+    MaxFanSpeedMode, PerfMode, ThermalZone,
 };
 use anyhow::{bail, ensure, Result};
-use log::debug;
+use log::{debug, trace};
 
 // USB HID command codes - see data/README.md for protocol details
 mod cmd {
@@ -41,6 +41,7 @@ mod cmd {
 }
 
 fn send_command(device: &Device, command: u16, args: &[u8]) -> Result<Packet> {
+    trace!("Sending command 0x{:04X} with args {:02X?}", command, args);
     let response = device.send(Packet::new(command, args))?;
     ensure!(response.get_args().starts_with(args));
     Ok(response)
@@ -51,11 +52,11 @@ fn set_perf_mode_internal(device: &Device, perf_mode: PerfMode, fan_mode: FanMod
         bail!("{:?} allowed only in {:?}", fan_mode, PerfMode::Balanced);
     }
 
-    [1, 2].into_iter().try_for_each(|zone| {
+    ThermalZone::ALL.into_iter().try_for_each(|zone| {
         send_command(
             device,
             cmd::SET_PERF_MODE,
-            &[0x01, zone, perf_mode as u8, fan_mode as u8],
+            &[0x01, zone as u8, perf_mode as u8, fan_mode as u8],
         )
         .map(|_| ())
     })
@@ -85,6 +86,7 @@ fn get_boost_internal(device: &Device, cluster: Cluster) -> Result<u8> {
 ///
 /// Fan mode is automatically set to Auto. Use [`set_fan_mode`] to switch to manual fan control.
 pub fn set_perf_mode(device: &Device, perf_mode: PerfMode) -> Result<()> {
+    debug!("Setting performance mode to {:?}", perf_mode);
     set_perf_mode_internal(device, perf_mode, FanMode::Auto)
 }
 
@@ -92,10 +94,10 @@ pub fn set_perf_mode(device: &Device, perf_mode: PerfMode) -> Result<()> {
 ///
 /// Queries both thermal zones and ensures they match.
 pub fn get_perf_mode(device: &Device) -> Result<(PerfMode, FanMode)> {
-    let results: Vec<_> = [1, 2]
+    let results: Vec<_> = ThermalZone::ALL
         .into_iter()
         .map(|zone| {
-            let response = device.send(Packet::new(cmd::GET_PERF_MODE, &[0, zone, 0, 0]))?;
+            let response = device.send(Packet::new(cmd::GET_PERF_MODE, &[0, zone as u8, 0, 0]))?;
             Ok((
                 PerfMode::try_from(response.get_args()[2])?,
                 FanMode::try_from(response.get_args()[3])?,
@@ -115,11 +117,13 @@ pub fn get_perf_mode(device: &Device) -> Result<(PerfMode, FanMode)> {
 
 /// Sets the CPU boost level. Requires Custom performance mode.
 pub fn set_cpu_boost(device: &Device, boost: CpuBoost) -> Result<()> {
+    debug!("Setting CPU boost to {:?}", boost);
     set_boost_internal(device, Cluster::Cpu, boost as u8)
 }
 
 /// Sets the GPU boost level. Requires Custom performance mode.
 pub fn set_gpu_boost(device: &Device, boost: GpuBoost) -> Result<()> {
+    debug!("Setting GPU boost to {:?}", boost);
     set_boost_internal(device, Cluster::Gpu, boost as u8)
 }
 
@@ -137,23 +141,26 @@ pub fn get_gpu_boost(device: &Device) -> Result<GpuBoost> {
 ///
 /// Requires Balanced performance mode with Manual fan mode.
 pub fn set_fan_rpm(device: &Device, rpm: u16) -> Result<()> {
-    ensure!((2000..=5000).contains(&rpm));
+    ensure!(
+        (2000..=5000).contains(&rpm),
+        "RPM must be between 2000 and 5000, got {}",
+        rpm
+    );
     ensure!(
         get_perf_mode(device)? == (PerfMode::Balanced, FanMode::Manual),
         "Performance mode must be {:?} and fan mode must be {:?}",
         PerfMode::Balanced,
         FanMode::Manual
     );
-    [FanZone::Zone1, FanZone::Zone2]
-        .into_iter()
-        .try_for_each(|zone| {
-            send_command(
-                device,
-                cmd::SET_FAN_RPM,
-                &[0, zone as u8, (rpm / 100) as u8],
-            )
-            .map(|_| ())
-        })
+    debug!("Setting fan RPM to {}", rpm);
+    FanZone::ALL.into_iter().try_for_each(|zone| {
+        send_command(
+            device,
+            cmd::SET_FAN_RPM,
+            &[0, zone as u8, (rpm / 100) as u8],
+        )
+        .map(|_| ())
+    })
 }
 
 /// Gets the current fan RPM for the specified zone.
@@ -253,6 +260,7 @@ pub fn get_logo_mode(device: &Device) -> Result<LogoMode> {
 
 /// Sets the lid logo mode (Off, Static, or Breathing).
 pub fn set_logo_mode(device: &Device, mode: LogoMode) -> Result<()> {
+    debug!("Setting logo mode to {:?}", mode);
     if mode != LogoMode::Off {
         set_logo_mode_internal(device, mode)?;
     }
@@ -269,6 +277,7 @@ pub fn get_keyboard_brightness(device: &Device) -> Result<u8> {
 
 /// Sets the keyboard backlight brightness (0-255).
 pub fn set_keyboard_brightness(device: &Device, brightness: u8) -> Result<()> {
+    debug!("Setting keyboard brightness to {}", brightness);
     let args = &[1, 5, brightness];
     ensure!(device
         .send(Packet::new(cmd::SET_KBD_BRIGHTNESS, args))?
@@ -305,6 +314,7 @@ pub fn get_battery_care(device: &Device) -> Result<BatteryCare> {
 
 /// Sets the battery care mode (limits charging to 80% to extend battery life).
 pub fn set_battery_care(device: &Device, mode: BatteryCare) -> Result<()> {
+    debug!("Setting battery care to {:?}", mode);
     let args = &[mode as u8];
     ensure!(device
         .send(Packet::new(cmd::SET_BATTERY_CARE, args))?

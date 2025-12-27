@@ -2,7 +2,7 @@ use crate::descriptor::{Descriptor, SUPPORTED};
 use crate::packet::Packet;
 
 use anyhow::{anyhow, Context, Result};
-use log::{debug, error};
+use log::{debug, trace, warn};
 #[cfg(target_os = "linux")]
 use std::fs;
 use std::{thread, time};
@@ -67,27 +67,30 @@ impl Device {
             (info.vendor_id(), info.product_id()) == (Device::RAZER_VID, descriptor.pid)
         }) {
             let path = info.path();
-            debug!("Trying to open device at path: {:?}", path);
+            trace!("Trying to open device at path: {:?}", path);
             match api.open_path(path) {
                 Ok(device) => {
-                    debug!("Opened device, testing feature report...");
+                    trace!("Opened device, testing feature report...");
                     // Report ID (1 byte) + Packet (90 bytes) = 91 bytes total
                     match device.send_feature_report(&[0u8; 91]) {
                         Ok(_) => {
-                            debug!("Feature report succeeded");
+                            debug!(
+                                "Connected to {} (PID: 0x{:04X})",
+                                descriptor.name, descriptor.pid
+                            );
                             return Ok(Device {
                                 device,
                                 info: descriptor.clone(),
                             });
                         }
                         Err(e) => {
-                            debug!("Feature report failed: {}", e);
+                            debug!("Feature report failed on path {:?}: {}", path, e);
                             last_error = Some(e.to_string());
                         }
                     }
                 }
                 Err(e) => {
-                    debug!("Failed to open path: {}", e);
+                    debug!("Failed to open path {:?}: {}", path, e);
                     last_error = Some(e.to_string());
                 }
             }
@@ -106,6 +109,8 @@ impl Device {
         // extra byte for report id
         let mut response_buf: Vec<u8> = vec![0x00; 1 + std::mem::size_of::<Packet>()];
 
+        // Delay before sending to ensure device is ready for new command.
+        // Per openrazer protocol, USB HID polling rate requires minimum inter-command spacing.
         thread::sleep(time::Duration::from_micros(1000));
         self.device
             .send_feature_report(
@@ -118,6 +123,8 @@ impl Device {
             )
             .context("Failed to send feature report")?;
 
+        // Delay before reading response to allow device to process command.
+        // 2ms provides margin for device firmware to prepare response buffer.
         thread::sleep(time::Duration::from_micros(2000));
         if response_buf.len() != self.device.get_feature_report(&mut response_buf)? {
             return Err(anyhow!("Response size != {}", response_buf.len()));
@@ -149,16 +156,16 @@ impl Device {
 
         match read_device_model() {
             Ok(model) => {
-                debug!("Detected model number: {}", model);
+                debug!("Detected model: {}", model);
                 if model.starts_with("RZ09-") {
                     Ok((razer_pid_list, model))
                 } else {
-                    error!("Detected model but it's not a Razer laptop: {}", model);
+                    warn!("Model {} is not a Razer laptop (expected RZ09-*)", model);
                     anyhow::bail!("Detected model but it's not a Razer laptop: {}", model)
                 }
             }
             Err(e) => {
-                error!("Failed to detect model: {}", e);
+                warn!("Failed to detect model: {}", e);
                 anyhow::bail!("Failed to detect model: {}", e)
             }
         }
@@ -170,18 +177,21 @@ impl Device {
     /// to find and open a compatible device.
     pub fn detect() -> Result<Device> {
         let (pid_list, model_number_prefix) = Device::enumerate()?;
-        debug!("Looking for support for model: {}", model_number_prefix);
+        trace!("Looking for support for model: {}", model_number_prefix);
 
         match SUPPORTED
             .iter()
             .find(|supported| model_number_prefix.starts_with(supported.model_number_prefix))
         {
             Some(supported) => {
-                debug!("Found supported device: {:?}", supported);
+                debug!("Found supported device: {}", supported.name);
                 Device::new(supported.clone())
             }
             None => {
-                debug!("Model not supported");
+                warn!(
+                    "Model {} with PIDs {:0>4x?} is not supported",
+                    model_number_prefix, pid_list
+                );
                 anyhow::bail!(
                     "Model {} with PIDs {:0>4x?} is not supported",
                     model_number_prefix,

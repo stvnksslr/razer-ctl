@@ -3,6 +3,22 @@ use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use strum_macros::{EnumIter, EnumString};
 
+/// Generates TryFrom<u8> implementation for enums with explicit discriminants.
+macro_rules! impl_try_from_u8 {
+    ($enum_type:ident { $($value:expr => $variant:ident),+ $(,)? }) => {
+        impl TryFrom<u8> for $enum_type {
+            type Error = anyhow::Error;
+
+            fn try_from(value: u8) -> Result<Self, Self::Error> {
+                match value {
+                    $($value => Ok(Self::$variant),)+
+                    _ => bail!("Failed to convert {} to {}", value, stringify!($enum_type)),
+                }
+            }
+        }
+    };
+}
+
 #[derive(Clone, Copy)]
 pub enum Cluster {
     Cpu = 0x01,
@@ -13,6 +29,23 @@ pub enum Cluster {
 pub enum FanZone {
     Zone1 = 0x01,
     Zone2 = 0x02,
+}
+
+impl FanZone {
+    /// Both fan zones for operations that affect all fans
+    pub const ALL: [FanZone; 2] = [FanZone::Zone1, FanZone::Zone2];
+}
+
+/// Thermal zones for performance mode operations
+#[derive(Clone, Copy)]
+pub enum ThermalZone {
+    Zone1 = 0x01,
+    Zone2 = 0x02,
+}
+
+impl ThermalZone {
+    /// Both thermal zones for operations that affect the entire thermal system
+    pub const ALL: [ThermalZone; 2] = [ThermalZone::Zone1, ThermalZone::Zone2];
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, EnumIter, ValueEnum)]
@@ -71,94 +104,13 @@ pub enum BatteryCare {
     Enable = 0xd0,
 }
 
-impl TryFrom<u8> for GpuBoost {
-    type Error = anyhow::Error;
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        match value {
-            0 => Ok(Self::Low),
-            1 => Ok(Self::Medium),
-            2 => Ok(Self::High),
-            _ => bail!("Failed to convert {} to GpuBoost", value),
-        }
-    }
-}
-
-impl TryFrom<u8> for PerfMode {
-    type Error = anyhow::Error;
-
-    fn try_from(perf_mode: u8) -> Result<Self, Self::Error> {
-        match perf_mode {
-            0 => Ok(Self::Balanced),
-            5 => Ok(Self::Silent),
-            4 => Ok(Self::Custom),
-            _ => bail!("Failed to convert {} to PerformanceMode", perf_mode),
-        }
-    }
-}
-
-impl TryFrom<u8> for FanMode {
-    type Error = anyhow::Error;
-
-    fn try_from(fan_mode: u8) -> Result<Self, Self::Error> {
-        match fan_mode {
-            0 => Ok(Self::Auto),
-            1 => Ok(Self::Manual),
-            _ => bail!("Failed to convert {} to FanMode", fan_mode),
-        }
-    }
-}
-
-impl TryFrom<u8> for CpuBoost {
-    type Error = anyhow::Error;
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        match value {
-            0 => Ok(Self::Low),
-            1 => Ok(Self::Medium),
-            2 => Ok(Self::High),
-            3 => Ok(Self::Boost),
-            4 => Ok(Self::Overclock),
-            _ => bail!("Failed to convert {} to CpuBoost", value),
-        }
-    }
-}
-
-impl TryFrom<u8> for LightsAlwaysOn {
-    type Error = anyhow::Error;
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        match value {
-            0 => Ok(LightsAlwaysOn::Disable),
-            3 => Ok(LightsAlwaysOn::Enable),
-            _ => bail!("Failed to convert {} to LightsAlwaysOn", value),
-        }
-    }
-}
-
-impl TryFrom<u8> for BatteryCare {
-    type Error = anyhow::Error;
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        match value {
-            0x50 => Ok(BatteryCare::Disable),
-            0xd0 => Ok(BatteryCare::Enable),
-            _ => bail!("Failed to convert {} to BatteryCare", value),
-        }
-    }
-}
-
-impl TryFrom<u8> for MaxFanSpeedMode {
-    type Error = anyhow::Error;
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        match value {
-            0x02 => Ok(MaxFanSpeedMode::Enable),
-            0x00 => Ok(MaxFanSpeedMode::Disable),
-            _ => bail!("Failed to convert {} to MaxFanSpeedMode", value),
-        }
-    }
-}
+impl_try_from_u8!(GpuBoost { 0 => Low, 1 => Medium, 2 => High });
+impl_try_from_u8!(PerfMode { 0 => Balanced, 5 => Silent, 4 => Custom });
+impl_try_from_u8!(FanMode { 0 => Auto, 1 => Manual });
+impl_try_from_u8!(CpuBoost { 0 => Low, 1 => Medium, 2 => High, 3 => Boost, 4 => Overclock });
+impl_try_from_u8!(LightsAlwaysOn { 0 => Disable, 3 => Enable });
+impl_try_from_u8!(BatteryCare { 0x50 => Disable, 0xd0 => Enable });
+impl_try_from_u8!(MaxFanSpeedMode { 0x00 => Disable, 0x02 => Enable });
 
 #[cfg(test)]
 mod tests {
