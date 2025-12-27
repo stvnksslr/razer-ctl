@@ -3,7 +3,7 @@ resolver = "2"
 members = [ "librazer", "bhelper"]
 
 [workspace.package]
-version = "0.8.0"
+version = "0.8.1"
 
 [profile.release]
 lto = true
