@@ -14,8 +14,8 @@ git_release_enable = false
 [[package]]
 name = "blade-helper"
 changelog_include = ["blade-helper"]
-publish = true
-release = true
+publish = false
+git_release_enable = true
 
 [changelog]
 body = """
