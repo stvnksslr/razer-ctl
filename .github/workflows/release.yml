@@ -30,6 +30,9 @@ jobs:
         run: |
           git config --global url."https://${{ secrets.RELEASE_PLZ_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
