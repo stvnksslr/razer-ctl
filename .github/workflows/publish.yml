@@ -5,13 +5,11 @@ on:
     types: [ published ]
 
 permissions:
-  contents: write
-
+  contents: write 
+  
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
-    # Only run for blade-helper releases (tags like blade-helper-v0.1.0)
-    if: startsWith(github.event.release.tag_name, 'blade-helper-v')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,13 +19,10 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-unknown-linux-gnu,x86_64-pc-windows-gnu
+          targets: x86_64-unknown-linux-gnu,x86_64-pc-windows-gnu,x86_64-apple-darwin,aarch64-unknown-linux-gnu,aarch64-apple-darwin
 
-      - name: Install MinGW
-        run: sudo apt-get update && sudo apt-get install -y mingw-w64
-
-      - name: Install libudev-dev
-        run: sudo apt-get install -y libudev-dev
+      - name: Install MinGW and libudev
+        run: sudo apt-get update && sudo apt-get install -y mingw-w64 libudev-dev
 
       - name: Set up Zig
         uses: mlugg/setup-zig@v2
@@ -36,19 +31,12 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: stable
-
-      - name: Extract version from tag
-        id: version
-        run: echo "tag=${GITHUB_REF_NAME#blade-helper-}" >> $GITHUB_OUTPUT
-
+      
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
           version: "~> v2"
-          # Skip validate because actual tag is blade-helper-vX.Y.Z but we use vX.Y.Z
-          args: release --clean --skip=validate
+          args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Use version without 'blade-helper-' prefix for clean archive names
-          GORELEASER_CURRENT_TAG: ${{ steps.version.outputs.tag }}

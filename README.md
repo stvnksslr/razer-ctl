@@ -1,8 +1,19 @@
-# Razer Blade Control Utility
+# Razer Laptop Tools
 
-Cross-platform tool for controlling Razer laptop BIOS settings without Synapse.
+The plan here is to use the solid foundation of tdakhran to build something that follows a few core pillars
 
-The biggest benefit of using this tool over Synapse is the ability to set your laptop to silent mode while on battery, which for some inexplicable reason is not available in Synapse. This improved battery life on Linux from ~4 hours to a consistent 7 hours on a 2023 Blade 14.
+* easy to maintain
+* able to add and adjust devices without needing to own them, i own 1 razer latop and dont plan on another at this time
+* cross platform (linux / windows)
+  
+## What's in this fork?
+* librazer published to crates.io for a generic interface other tools can also use
+* bhelper (blade helper cli) cross platform tool for managing razer bios and devices
+
+## Future Features 
+* TDP controls + bios controls
+* profiles
+* a guide on how to get this machine to behave and keep a somewhat consistent battery consumption
 
 ## Supported Devices
 
@@ -25,12 +36,14 @@ Additional models can be added - see [Adding Device Support](#adding-device-supp
 ## Installation
 
 ```bash
-cargo install --path blade-helper
+cargo install --path bhelper
 ```
 
 ### Linux: USB Permissions
 
 On Linux, you need udev rules to access USB devices without root:
+
+NOTE: this is only for testing and is very insecure, we will likely follow the pattern established by other razer tools
 
 ```bash
 sudo cp 99-razer.rules /etc/udev/rules.d/

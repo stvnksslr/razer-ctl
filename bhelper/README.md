@@ -1,4 +1,4 @@
-# blade-helper
+# bhelper
 
 A command-line tool for controlling Razer laptop BIOS settings without Synapse.
 
@@ -25,7 +25,7 @@ Download from [GitHub Releases](https://github.com/stvnksslr/razer-ctl/releases)
 ### From crates.io
 
 ```bash
-cargo install blade-helper
+cargo install bhelper
 ```
 
 ### From source
@@ -33,7 +33,7 @@ cargo install blade-helper
 ```bash
 git clone https://github.com/stvnksslr/razer-ctl
 cd razer-ctl
-cargo install --path blade-helper
+cargo install --path bhelper
 ```
 
 ### Linux Requirements

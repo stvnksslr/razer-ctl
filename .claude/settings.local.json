@@ -1,35 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(cat:*)",
-      "Bash(cargo --version:*)",
-      "Bash(rustc:*)",
-      "Bash(find:*)",
-      "Bash(lsusb:*)",
-      "Bash(cargo build:*)",
-      "Bash(done)",
-      "Bash(udevadm info:*)",
-      "Bash(for i in 0 1 2)",
-      "Bash(do echo \"=== hidraw$i ===\")",
-      "Bash(cargo run:*)",
-      "Bash(RUST_LOG=debug cargo run:*)",
-      "Bash(getenforce:*)",
-      "Bash(ausearch:*)",
-      "Bash(sudo ausearch:*)",
-      "Bash(sudo /home/stvnksslr/Projects/personal/razer-ctl/target/release/blade-helper status:*)",
-      "Bash(dmesg:*)",
-      "Bash(journalctl:*)",
-      "Bash(cargo fmt:*)",
-      "Bash(cargo clippy:*)",
-      "WebFetch(domain:release-plz.dev)",
-      "Bash(git show:*)",
-      "WebSearch",
-      "Bash(gh pr view:*)",
-      "WebFetch(domain:github.com)",
-      "WebFetch(domain:goreleaser.com)"
+      "WebSearch"
     ]
-  },
-  "enabledPlugins": {
-    "github@claude-plugins-official": true
   }
 }

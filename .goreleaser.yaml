@@ -1,6 +1,8 @@
 version: 2
 
-project_name: blade-helper
+env:
+  - CFLAGS=-isystem /usr/include
+  - PKG_CONFIG_ALLOW_CROSS=1
 
 before:
   hooks:
@@ -9,15 +11,17 @@ before:
     - cargo fetch --locked
 
 builds:
-  - builder: rust
-    dir: blade-helper
+  - id: "bhelper"
+    binary: bhelper
+    builder: rust
+    # tool: cross
     flags:
       - --release
+      - --package=bhelper
+      # - --features=self_update
     targets:
       - x86_64-unknown-linux-gnu
       - x86_64-pc-windows-gnu
-    id: "blade-helper"
-    binary: blade-helper
 
 archives:
   - formats: ["tar.gz"]
@@ -28,14 +32,13 @@ archives:
       - none*
     name_template: >-
       {{ .ProjectName }}-{{ .Target }}
-    builds:
-      - blade-helper
+    ids:
+      - bhelper
 
 changelog:
   disable: true
 
 release:
-  # Use the existing release created by release-plz
-  mode: keep-existing
   footer: >-
+    ---
     Released by [GoReleaser](https://goreleaser.com)

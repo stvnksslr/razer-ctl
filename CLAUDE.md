@@ -25,11 +25,11 @@ cargo fmt --all
 cargo clippy --workspace -- -D warnings
 
 # Install CLI locally
-cargo install --path blade-helper
+cargo install --path bhelper
 
 # Run CLI directly during development
-cargo run --package blade-helper -- status
-cargo run --package blade-helper -- --json status
+cargo run --package bhelper -- status
+cargo run --package bhelper -- --json status
 ```
 
 **Note:** On Linux, building requires `libudev-dev` for USB HID support.
@@ -54,7 +54,7 @@ Two crates with clear separation of concerns:
 | `types.rs` | Protocol enums (PerfMode, FanMode, CpuBoost, GpuBoost, LogoMode) |
 | `feature.rs` | Compile-time feature validation macros |
 
-### blade-helper Components
+### bhelper Components
 
 | File | Purpose |
 |------|---------|

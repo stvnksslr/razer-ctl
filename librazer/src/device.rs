@@ -3,7 +3,9 @@ use crate::packet::Packet;
 
 use anyhow::{anyhow, Context, Result};
 use log::{debug, error};
-use std::{fs, thread, time};
+#[cfg(target_os = "linux")]
+use std::fs;
+use std::{thread, time};
 
 /// Represents a connected Razer laptop device.
 ///

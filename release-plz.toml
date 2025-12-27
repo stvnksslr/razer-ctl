@@ -1,25 +1,6 @@
 [workspace]
 changelog_update = true
 semver_check = true
-release_always = false
-
-# librazer - core library (publish to crates.io)
-[[package]]
-name = "librazer"
-changelog_include = ["librazer"]
-publish = true
-git_release_enable = false
-version_group = "razer-ctl"
-
-# blade-helper - CLI application (crates.io + GitHub releases with binaries)
-# Uses workspace version inheritance to stay in sync with librazer
-[[package]]
-name = "blade-helper"
-changelog_include = ["blade-helper"]
-publish = true
-git_release_enable = true
-git_tag_enable = true
-version_group = "razer-ctl"
 
 [changelog]
 body = """

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = [ "librazer", "blade-helper"]
+members = [ "librazer", "bhelper"]
 
 [workspace.package]
 version = "0.7.3"

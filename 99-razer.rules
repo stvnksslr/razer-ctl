@@ -1,5 +1,6 @@
 # Razer devices - allow user access without root
 # Install: sudo cp 99-razer.rules /etc/udev/rules.d/
 # Reload:  sudo udevadm control --reload-rules && sudo udevadm trigger
+# ATTENTION: this is for testing and should never be used
 
 SUBSYSTEM=="usb", ATTR{idVendor}=="1532", MODE="0666"
