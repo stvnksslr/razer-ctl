@@ -11,12 +11,12 @@ publish = true
 git_release_enable = false
 version_group = "razer-ctl"
 
-# blade-helper - CLI application (GitHub releases only, not crates.io)
+# blade-helper - CLI application (crates.io + GitHub releases with binaries)
 # Uses workspace version inheritance to stay in sync with librazer
 [[package]]
 name = "blade-helper"
 changelog_include = ["blade-helper"]
-publish = false
+publish = true
 git_release_enable = true
 git_tag_enable = true
 version_group = "razer-ctl"
